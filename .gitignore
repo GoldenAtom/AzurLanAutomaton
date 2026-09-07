@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# VS Code local stuff
+.vscode/
+
+# Runtime/debug output
+debug/
+logs/
+*.log
+
+# Temporary screenshots
+*_debug.png
+unknown_*.png
+
+# OS junk
+Thumbs.db
+.DS_Store
