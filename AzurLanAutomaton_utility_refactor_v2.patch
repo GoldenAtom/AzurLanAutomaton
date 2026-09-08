@@ -1,0 +1,843 @@
+diff --git a/AzureLaneAutomaton.py b/AzureLaneAutomaton.py
+index 5f30896..5942d0e 100644
+--- a/AzureLaneAutomaton.py
++++ b/AzureLaneAutomaton.py
+@@ -1,202 +1,21 @@
+-import cv2
+-import numpy as np
+-import subprocess
+-import time
+-from pathlib import Path
+-from datetime import datetime
++import utility
+ 
+ 
+-ADB = r"C:\Program Files\BlueStacks_nxt\HD-Adb.exe"
+-DEVICE = "127.0.0.1:5556"
+-
+-DEBUG_DIR = Path("debug")
+-TEMPLATE_DIR = Path("templates")
+-
+-DEBUG_DIR.mkdir(exist_ok=True)
+-TEMPLATE_DIR.mkdir(exist_ok=True)
+-
+-
+-def adb_bytes(*args):
+-    cmd = [ADB, "-s", DEVICE, *args]
+-
+-    return subprocess.check_output(
+-        cmd,
+-        creationflags=subprocess.CREATE_NO_WINDOW
+-    )
+-
+-
+-def adb_text(*args):
+-    return adb_bytes(*args).decode(
+-        errors="replace"
+-    ).strip()
+-
+-
+-def screenshot():
+-    raw = adb_bytes(
+-        "exec-out",
+-        "screencap",
+-        "-p"
+-    )
+-
+-    image = cv2.imdecode(
+-        np.frombuffer(raw, np.uint8),
+-        cv2.IMREAD_COLOR
+-    )
+-
+-    if image is None:
+-        raise RuntimeError(
+-            "ADB screenshot could not be decoded."
+-        )
+-
+-    return image
+-
+-
+-def tap(x, y):
+-    adb_bytes(
+-        "shell",
+-        "input",
+-        "tap",
+-        str(int(x)),
+-        str(int(y))
+-    )
+-
+-
+-def save_debug(image, name="unknown"):
+-    timestamp = datetime.now().strftime(
+-        "%Y-%m-%d_%H-%M-%S"
+-    )
+-
+-    path = DEBUG_DIR / f"{name}_{timestamp}.png"
+-
+-    cv2.imwrite(str(path), image)
+-
+-    return path
+-
+-
+-def load_template(name):
+-    path = TEMPLATE_DIR / f"{name}.png"
+-
+-    image = cv2.imread(str(path))
+-
+-    if image is None:
+-        raise FileNotFoundError(
+-            f"Missing template: {path}"
+-        )
+-
+-    return image
+-
+-
+-def find_template(
+-    screen,
+-    template,
+-    threshold=0.90,
+-    region=None
+-):
+-    """
+-    region:
+-        (x1, y1, x2, y2)
+-
+-    Returns:
+-        None
+-        or
+-        {
+-            "score": float,
+-            "x": int,
+-            "y": int
+-        }
+-    """
+-
+-    if region:
+-        x1, y1, x2, y2 = region
+-        search = screen[y1:y2, x1:x2]
+-        offset_x = x1
+-        offset_y = y1
+-    else:
+-        search = screen
+-        offset_x = 0
+-        offset_y = 0
+-
+-    th, tw = template.shape[:2]
+-    sh, sw = search.shape[:2]
+-
+-    if tw > sw or th > sh:
+-        return None
+-
+-    result = cv2.matchTemplate(
+-        search,
+-        template,
+-        cv2.TM_CCOEFF_NORMED
+-    )
+-
+-    _, score, _, location = cv2.minMaxLoc(result)
+-
+-    if score < threshold:
+-        return None
+-
+-    x = offset_x + location[0] + tw // 2
+-    y = offset_y + location[1] + th // 2
+-
+-    return {
+-        "score": float(score),
+-        "x": x,
+-        "y": y
+-    }
+-
+-
+-def click_template(
+-    screen,
+-    template,
+-    threshold=0.90,
+-    region=None
+-):
+-    match = find_template(
+-        screen,
+-        template,
+-        threshold,
+-        region
+-    )
+-
+-    if match is None:
+-        return False
+-
+-    print(
+-        f"Found at "
+-        f"({match['x']}, {match['y']}) "
+-        f"confidence={match['score']:.3f}"
+-    )
+-
+-    tap(
+-        match["x"],
+-        match["y"]
+-    )
+-
+-    return True
+-
+-
+-if __name__ == "__main__":
+-
++def main() -> None:
+     print("Connecting to BlueStacks...")
+ 
+-    print(
+-        adb_text("shell", "wm", "size")
+-    )
++    if not utility.adbAlive():
++        raise RuntimeError("BlueStacks ADB is not responding.")
+ 
+-    print("Capturing screenshot...")
++    screen = utility.getScreenshot()
++    print(f"Screenshot: {screen.shape[1]}x{screen.shape[0]}")
+ 
+-    screen = screenshot()
++    result = utility.identifyScreenDetails(screen)
++    print(f"Screen: {result.screen.value} (confidence={result.score:.3f})")
+ 
+-    print(
+-        f"Screenshot: "
+-        f"{screen.shape[1]}x{screen.shape[0]}"
+-    )
++    path = utility.saveDebug(screen, "startup")
++    print(f"Saved startup screenshot to: {path}")
+ 
+-    path = save_debug(
+-        screen,
+-        "startup"
+-    )
+ 
+-    print(
+-        f"Saved test image to: {path}"
+-    )
+-
+-    print("ADB vision system working.")
++if __name__ == "__main__":
++    main()
+diff --git a/README.md b/README.md
+new file mode 100644
+index 0000000..2b57550
+--- /dev/null
++++ b/README.md
+@@ -0,0 +1,58 @@
++# AzurLanAutomaton
++
++BlueStacks/ADB automation experiment for Azur Lane.
++
++## Architecture
++
++`AzureLaneAutomaton.py` contains high-level behaviour only. It should normally call the public facade in `utility.py` rather than importing OpenCV or issuing ADB commands itself.
++
++- `utility.py` - stable public API used by the main automaton
++- `config.py` - user/environment configuration
++- `core/adb.py` - BlueStacks ADB transport, screenshots, taps, app restart
++- `core/vision.py` - image loading, transparency-aware template matching, similarity
++- `core/buttons.py` - named button lookup/clicking
++- `core/screens.py` - screen-state identification
++- `core/timer.py` - battle timer crop/watchdog and future numeric timer parsing
++- `templates/buttons/` - tightly cropped button templates such as `battle.png`
++- `templates/screens/` - reference screenshots such as `home.png`
++- `debug/` - runtime screenshots/logs; keep ignored by Git
++
++## Public API examples
++
++```python
++import utility
++from utility import Button, Screen
++
++screen = utility.getScreenshot()
++state = utility.identifyScreen(screen)
++
++if state == Screen.HOME:
++    utility.click(Button.BATTLE, screen)
++```
++
++Strings also work for buttons:
++
++```python
++utility.click("battle")
++```
++
++## Screen references
++
++A screen may have either one reference image:
++
++```text
++templates/screens/home.png
++```
++
++or multiple variants:
++
++```text
++templates/screens/home/01.png
++templates/screens/home/02.png
++```
++
++`identifyScreen()` checks all available known references and returns `Screen.UNKNOWN` if nothing reaches the configured confidence threshold.
++
++## Transparent button templates
++
++PNG alpha is preserved. `core/vision.py` uses the alpha channel as a template-matching mask, so transparent pixels do not contribute to matching.
+diff --git a/config.py b/config.py
+new file mode 100644
+index 0000000..1f79b1b
+--- /dev/null
++++ b/config.py
+@@ -0,0 +1,21 @@
++from pathlib import Path
++
++BASE_DIR = Path(__file__).resolve().parent
++
++ADB_PATH = r"C:\Program Files\BlueStacks_nxt\HD-Adb.exe"
++DEVICE = "127.0.0.1:5556"
++PACKAGE_NAME = "com.YoStarEN.AzurLane"
++
++EXPECTED_SCREEN_SIZE = (1920, 1080)
++
++TEMPLATE_DIR = BASE_DIR / "templates"
++BUTTON_TEMPLATE_DIR = TEMPLATE_DIR / "buttons"
++SCREEN_TEMPLATE_DIR = TEMPLATE_DIR / "screens"
++TIMER_TEMPLATE_DIR = TEMPLATE_DIR / "timer"
++DEBUG_DIR = BASE_DIR / "debug"
++
++DEFAULT_BUTTON_THRESHOLD = 0.90
++DEFAULT_SCREEN_THRESHOLD = 0.72
++
++# x1, y1, x2, y2. Tune once the exact battle-timer crop is settled.
++BATTLE_TIMER_REGION = (1600, 20, 1820, 125)
+diff --git a/core/__init__.py b/core/__init__.py
+new file mode 100644
+index 0000000..a9273e8
+--- /dev/null
++++ b/core/__init__.py
+@@ -0,0 +1 @@
++"""Internal implementation modules for AzurLanAutomaton."""
+diff --git a/core/adb.py b/core/adb.py
+new file mode 100644
+index 0000000..c99a7f9
+--- /dev/null
++++ b/core/adb.py
+@@ -0,0 +1,65 @@
++from __future__ import annotations
++
++import subprocess
++import time
++
++import cv2
++import numpy as np
++
++import config
++
++
++def _creation_flags() -> int:
++    return getattr(subprocess, "CREATE_NO_WINDOW", 0)
++
++
++def run_bytes(*args: str) -> bytes:
++    cmd = [config.ADB_PATH, "-s", config.DEVICE, *args]
++    return subprocess.check_output(cmd, creationflags=_creation_flags())
++
++
++def run_text(*args: str) -> str:
++    return run_bytes(*args).decode(errors="replace").strip()
++
++
++def is_alive() -> bool:
++    try:
++        return run_text("shell", "echo", "alive") == "alive"
++    except (OSError, subprocess.SubprocessError):
++        return False
++
++
++def screenshot() -> np.ndarray:
++    raw = run_bytes("exec-out", "screencap", "-p")
++    image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
++
++    if image is None:
++        raise RuntimeError("ADB screenshot could not be decoded.")
++
++    return image
++
++
++def tap(x: int | float, y: int | float) -> None:
++    run_bytes("shell", "input", "tap", str(int(x)), str(int(y)))
++
++
++def force_stop(package_name: str = config.PACKAGE_NAME) -> None:
++    run_bytes("shell", "am", "force-stop", package_name)
++
++
++def launch(package_name: str = config.PACKAGE_NAME) -> None:
++    run_bytes(
++        "shell",
++        "monkey",
++        "-p",
++        package_name,
++        "-c",
++        "android.intent.category.LAUNCHER",
++        "1",
++    )
++
++
++def restart_app(package_name: str = config.PACKAGE_NAME, delay: float = 2.0) -> None:
++    force_stop(package_name)
++    time.sleep(delay)
++    launch(package_name)
+diff --git a/core/buttons.py b/core/buttons.py
+new file mode 100644
+index 0000000..8cab64e
+--- /dev/null
++++ b/core/buttons.py
+@@ -0,0 +1,69 @@
++from __future__ import annotations
++
++from enum import Enum
++from pathlib import Path
++
++import numpy as np
++
++import config
++from core import adb, vision
++
++
++class Button(str, Enum):
++    BATTLE = "battle"
++    CONFIRM = "confirm"
++    CONTINUE = "continue"
++    SKIP = "skip"
++    AUTO = "auto"
++    PAUSE = "pause"
++
++
++def _coerce_button(button: Button | str) -> Button:
++    if isinstance(button, Button):
++        return button
++    return Button(str(button).lower())
++
++
++def template_path(button: Button | str) -> Path:
++    button = _coerce_button(button)
++    return config.BUTTON_TEMPLATE_DIR / f"{button.value}.png"
++
++
++def locate_button(
++    button: Button | str,
++    screen: np.ndarray | None = None,
++    threshold: float = config.DEFAULT_BUTTON_THRESHOLD,
++    region: vision.Region | None = None,
++) -> vision.Match | None:
++    if screen is None:
++        screen = adb.screenshot()
++
++    path = template_path(button)
++    if not path.exists():
++        return None
++
++    template = vision.load_image(path)
++    return vision.find_template(screen, template, threshold=threshold, region=region)
++
++
++def button_exists(
++    button: Button | str,
++    screen: np.ndarray | None = None,
++    threshold: float = config.DEFAULT_BUTTON_THRESHOLD,
++    region: vision.Region | None = None,
++) -> bool:
++    return locate_button(button, screen, threshold, region) is not None
++
++
++def click_button(
++    button: Button | str,
++    screen: np.ndarray | None = None,
++    threshold: float = config.DEFAULT_BUTTON_THRESHOLD,
++    region: vision.Region | None = None,
++) -> bool:
++    match = locate_button(button, screen, threshold, region)
++    if match is None:
++        return False
++
++    adb.tap(match.x, match.y)
++    return True
+diff --git a/core/screens.py b/core/screens.py
+new file mode 100644
+index 0000000..fe9127f
+--- /dev/null
++++ b/core/screens.py
+@@ -0,0 +1,76 @@
++from __future__ import annotations
++
++from dataclasses import dataclass
++from enum import Enum
++from pathlib import Path
++
++import numpy as np
++
++import config
++from core import adb, vision
++
++
++class Screen(str, Enum):
++    HOME = "home"
++    MAP = "map"
++    BATTLE = "battle"
++    DIALOGUE = "dialogue"
++    RESULT = "result"
++    LOADING = "loading"
++    DOCK = "dock"
++    FORMATION = "formation"
++    UNKNOWN = "unknown"
++
++
++@dataclass(frozen=True)
++class ScreenMatch:
++    screen: Screen
++    score: float
++    reference: Path | None = None
++
++
++def _reference_files(screen: Screen) -> list[Path]:
++    files: list[Path] = []
++
++    single = config.SCREEN_TEMPLATE_DIR / f"{screen.value}.png"
++    if single.exists():
++        files.append(single)
++
++    variants = config.SCREEN_TEMPLATE_DIR / screen.value
++    if variants.is_dir():
++        files.extend(sorted(variants.glob("*.png")))
++
++    return files
++
++
++def identify_screen_details(
++    screen_image: np.ndarray | None = None,
++    threshold: float = config.DEFAULT_SCREEN_THRESHOLD,
++) -> ScreenMatch:
++    if screen_image is None:
++        screen_image = adb.screenshot()
++
++    best = ScreenMatch(Screen.UNKNOWN, 0.0, None)
++
++    for screen in Screen:
++        if screen is Screen.UNKNOWN:
++            continue
++
++        for path in _reference_files(screen):
++            reference = vision.load_image(path, unchanged=False)
++            score = vision.image_similarity(screen_image, reference)
++
++            if score > best.score:
++                best = ScreenMatch(screen, score, path)
++
++    if best.score < threshold:
++        return ScreenMatch(Screen.UNKNOWN, best.score, best.reference)
++
++    return best
++
++
++def identify_screen(
++    screen_image: np.ndarray | None = None,
++    threshold: float = config.DEFAULT_SCREEN_THRESHOLD,
++) -> Screen:
++    return identify_screen_details(screen_image, threshold).screen
+diff --git a/core/timer.py b/core/timer.py
+new file mode 100644
+index 0000000..c8840f2
+--- /dev/null
++++ b/core/timer.py
+@@ -0,0 +1,66 @@
++from __future__ import annotations
++
++import time
++from dataclasses import dataclass
++
++import cv2
++import numpy as np
++
++import config
++from core import adb, vision
++
++
++def timer_crop(screen: np.ndarray | None = None) -> np.ndarray:
++    if screen is None:
++        screen = adb.screenshot()
++    return vision.crop(screen, config.BATTLE_TIMER_REGION)
++
++
++def timer_similarity(a: np.ndarray, b: np.ndarray) -> float:
++    return vision.image_similarity(a, b, size=(160, 64))
++
++
++@dataclass
++class BattleTimerWatch:
++    """Detect a timer that has stopped visually changing.
++
++    This works before we implement OCR: if the cropped timer remains effectively
++    identical for too long during a battle, the simulation is probably stalled.
++    """
++
++    stuck_after: float = 15.0
++    similarity_threshold: float = 0.995
++
++    def __post_init__(self) -> None:
++        self._last: np.ndarray | None = None
++        self._last_change = time.monotonic()
++
++    def reset(self) -> None:
++        self._last = None
++        self._last_change = time.monotonic()
++
++    def update(self, screen: np.ndarray | None = None) -> bool:
++        current = timer_crop(screen)
++        now = time.monotonic()
++
++        if self._last is None:
++            self._last = current
++            self._last_change = now
++            return False
++
++        similarity = timer_similarity(self._last, current)
++        if similarity < self.similarity_threshold:
++            self._last_change = now
++
++        self._last = current
++        return (now - self._last_change) >= self.stuck_after
++
++
++def get_timer(screen: np.ndarray | None = None) -> int | None:
++    """Return remaining battle time in seconds once digit OCR is configured.
++
++    Numeric timer parsing is intentionally left unimplemented for now. The
++    watchdog above already lets us detect the battle-freeze case without OCR.
++    """
++    _ = screen
++    return None
+diff --git a/core/vision.py b/core/vision.py
+new file mode 100644
+index 0000000..3c9122a
+--- /dev/null
++++ b/core/vision.py
+@@ -0,0 +1,117 @@
++from __future__ import annotations
++
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Iterable
++
++import cv2
++import numpy as np
++
++Region = tuple[int, int, int, int]
++
++
++@dataclass(frozen=True)
++class Match:
++    score: float
++    x: int
++    y: int
++    width: int
++    height: int
++
++
++def load_image(path: str | Path, unchanged: bool = True) -> np.ndarray:
++    path = Path(path)
++    mode = cv2.IMREAD_UNCHANGED if unchanged else cv2.IMREAD_COLOR
++    image = cv2.imread(str(path), mode)
++
++    if image is None:
++        raise FileNotFoundError(path)
++
++    return image
++
++
++def crop(image: np.ndarray, region: Region) -> np.ndarray:
++    x1, y1, x2, y2 = region
++    return image[y1:y2, x1:x2]
++
++
++def _template_and_mask(template: np.ndarray) -> tuple[np.ndarray, np.ndarray | None]:
++    if template.ndim == 3 and template.shape[2] == 4:
++        bgr = template[:, :, :3]
++        alpha = template[:, :, 3]
++        mask = cv2.merge((alpha, alpha, alpha))
++        return bgr, mask
++
++    return template, None
++
++
++def find_template(
++    screen: np.ndarray,
++    template: np.ndarray,
++    threshold: float = 0.90,
++    region: Region | None = None,
++) -> Match | None:
++    if region is not None:
++        x1, y1, x2, y2 = region
++        search = screen[y1:y2, x1:x2]
++        offset_x, offset_y = x1, y1
++    else:
++        search = screen
++        offset_x = offset_y = 0
++
++    template_bgr, mask = _template_and_mask(template)
++
++    if search.ndim == 2 and template_bgr.ndim == 3:
++        search = cv2.cvtColor(search, cv2.COLOR_GRAY2BGR)
++    elif search.ndim == 3 and template_bgr.ndim == 2:
++        search = cv2.cvtColor(search, cv2.COLOR_BGR2GRAY)
++
++    th, tw = template_bgr.shape[:2]
++    sh, sw = search.shape[:2]
++
++    if tw > sw or th > sh:
++        return None
++
++    if mask is not None:
++        result = cv2.matchTemplate(search, template_bgr, cv2.TM_CCORR_NORMED, mask=mask)
++    else:
++        result = cv2.matchTemplate(search, template_bgr, cv2.TM_CCOEFF_NORMED)
++
++    _, score, _, location = cv2.minMaxLoc(result)
++
++    if not np.isfinite(score) or score < threshold:
++        return None
++
++    return Match(
++        score=float(score),
++        x=offset_x + location[0] + tw // 2,
++        y=offset_y + location[1] + th // 2,
++        width=tw,
++        height=th,
++    )
++
++
++def image_similarity(a: np.ndarray, b: np.ndarray, size: tuple[int, int] = (320, 180)) -> float:
++    """Return an inexpensive 0..1 visual similarity score.
++
++    This is intentionally broad screen-state matching, not pixel-perfect comparison.
++    Dynamic UI regions can later be excluded by the screen classifier.
++    """
++    a_small = cv2.resize(a, size, interpolation=cv2.INTER_AREA)
++    b_small = cv2.resize(b, size, interpolation=cv2.INTER_AREA)
++
++    if a_small.ndim == 3:
++        a_small = cv2.cvtColor(a_small, cv2.COLOR_BGR2GRAY)
++    if b_small.ndim == 3:
++        b_small = cv2.cvtColor(b_small, cv2.COLOR_BGR2GRAY)
++
++    a_small = cv2.GaussianBlur(a_small, (5, 5), 0)
++    b_small = cv2.GaussianBlur(b_small, (5, 5), 0)
++
++    diff = cv2.absdiff(a_small, b_small)
++    return max(0.0, min(1.0, 1.0 - float(np.mean(diff)) / 255.0))
++
++
++def best_similarity(image: np.ndarray, references: Iterable[np.ndarray]) -> float:
++    scores = [image_similarity(image, reference) for reference in references]
++    return max(scores, default=0.0)
+diff --git a/templates/buttons/.gitkeep b/templates/buttons/.gitkeep
+new file mode 100644
+index 0000000..e69de29
+diff --git a/templates/screens/.gitkeep b/templates/screens/.gitkeep
+new file mode 100644
+index 0000000..e69de29
+diff --git a/templates/timer/.gitkeep b/templates/timer/.gitkeep
+new file mode 100644
+index 0000000..e69de29
+diff --git a/utility.py b/utility.py
+new file mode 100644
+index 0000000..b452a98
+--- /dev/null
++++ b/utility.py
+@@ -0,0 +1,88 @@
++"""Public facade for the automation.
++
++Main logic should import this module instead of reaching directly into ADB,
++OpenCV, or the individual core modules.
++"""
++from __future__ import annotations
++
++from datetime import datetime
++from pathlib import Path
++
++import cv2
++import numpy as np
++
++import config
++from core import adb, buttons, screens, timer, vision
++from core.buttons import Button
++from core.screens import Screen, ScreenMatch
++from core.timer import BattleTimerWatch
++
++
++def getScreenshot() -> np.ndarray:
++    return adb.screenshot()
++
++
++def tap(x: int | float, y: int | float) -> None:
++    adb.tap(x, y)
++
++
++def click(
++    button: Button | str,
++    screen: np.ndarray | None = None,
++    threshold: float = config.DEFAULT_BUTTON_THRESHOLD,
++    region: vision.Region | None = None,
++) -> bool:
++    return buttons.click_button(button, screen, threshold, region)
++
++
++def exists(
++    button: Button | str,
++    screen: np.ndarray | None = None,
++    threshold: float = config.DEFAULT_BUTTON_THRESHOLD,
++    region: vision.Region | None = None,
++) -> bool:
++    return buttons.button_exists(button, screen, threshold, region)
++
++
++def identifyScreen(
++    screen: np.ndarray | None = None,
++    threshold: float = config.DEFAULT_SCREEN_THRESHOLD,
++) -> Screen:
++    return screens.identify_screen(screen, threshold)
++
++
++def identifyScreenDetails(
++    screen: np.ndarray | None = None,
++    threshold: float = config.DEFAULT_SCREEN_THRESHOLD,
++) -> ScreenMatch:
++    return screens.identify_screen_details(screen, threshold)
++
++
++def getTimer(screen: np.ndarray | None = None) -> int | None:
++    return timer.get_timer(screen)
++
++
++def restartGame(delay: float = 2.0) -> None:
++    adb.restart_app(delay=delay)
++
++
++def adbAlive() -> bool:
++    return adb.is_alive()
++
++
++def saveDebug(image: np.ndarray, name: str = "unknown") -> Path:
++    config.DEBUG_DIR.mkdir(parents=True, exist_ok=True)
++    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
++    path = config.DEBUG_DIR / f"{name}_{timestamp}.png"
++    cv2.imwrite(str(path), image)
++    return path
++
++
++# Snake-case aliases are also available for code that prefers PEP 8 naming.
++get_screenshot = getScreenshot
++identify_screen = identifyScreen
++identify_screen_details = identifyScreenDetails
++get_timer = getTimer
++restart_game = restartGame
++adb_alive = adbAlive
++save_debug = saveDebug
