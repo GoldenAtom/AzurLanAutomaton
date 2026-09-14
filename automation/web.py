@@ -27,7 +27,7 @@ def status():
     info["revision"] = command("git", "-C", str(ROOT), "rev-parse", "--short", "HEAD")
     info["mode"] = "idle (no game interaction)"
     info["logs"] = command("journalctl", "--user", "-u", UNIT, "-n", "35", "--no-pager", "-o", "short-iso")
-    info["updates"] = command("systemctl", "--user", "show", "azurlane-update.timer", "--property=NextElapseUSecRealtime,ActiveState")
+    info["updates"] = command("systemctl", "--user", "show", "azurlane-update.timer", "--property=ActiveState")
     info["update_logs"] = command("journalctl", "--user", "-u", "azurlane-update.service", "-n", "12", "--no-pager", "-o", "short-iso")
     return info
 
@@ -44,7 +44,17 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def valid_host(self):
+        # Only the configured listener address may name this control endpoint.
+        expected = "%s:%s" % self.server.server_address
+        if self.headers.get("Host") != expected:
+            self.reply(403, '{"error":"Unexpected host"}')
+            return False
+        return True
+
     def do_GET(self):
+        if not self.valid_host():
+            return
         if self.path == "/":
             self.reply(200, (ROOT / "automation" / "panel.html").read_text(), "text/html; charset=utf-8")
         elif self.path == "/api/status":
@@ -56,6 +66,8 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, "{}")
 
     def do_POST(self):
+        if not self.valid_host():
+            return
         # JSON/custom header and exact Origin reject cross-site browser requests.
         expected = "http://" + self.headers.get("Host", "")
         if (self.headers.get("Origin") != expected or self.headers.get("X-Automaton-Control") != "1"

@@ -14,7 +14,7 @@ git merge-base --is-ancestor "$old" "$new" || { echo 'Refusing divergent history
 stage=$(mktemp -d)
 trap 'git worktree remove --force "$stage" >/dev/null 2>&1 || true' EXIT
 git worktree add --detach "$stage" "$new"
-(cd "$stage"; python3 -m compileall -q automation core AzureLaneAutomaton.py config.py utility.py; python3 -m unittest discover -s tests -v)
+(cd "$stage"; bash -n scripts/update.sh; bash -n scripts/install-user-services.sh; python3 -m compileall -q automation core AzureLaneAutomaton.py config.py utility.py; python3 -m unittest discover -s tests -v)
 # Only fast-forward after validation. Never discard local modifications.
 git merge --ff-only "$new"
 for unit in systemd/azurlane-*; do install -m 644 "$unit" "$HOME/.config/systemd/user/"; done

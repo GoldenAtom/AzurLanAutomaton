@@ -58,3 +58,9 @@ class BrowserTests(unittest.TestCase):
             self.assertEqual(self.request("/api/start", headers), 200)
             command.assert_called_once_with("systemctl", "--user", "start", web.UNIT)
             self.assertEqual(self.request("/api/reboot", headers), 404)
+
+    def test_unexpected_host_rejected(self):
+        headers = {"Host": "untrusted.example", "Origin": "http://untrusted.example", "X-Automaton-Control": "1", "Content-Type": "application/json"}
+        with patch.object(web, "command") as command:
+            self.assertEqual(self.request("/api/start", headers), 403)
+            command.assert_not_called()
