@@ -87,3 +87,13 @@ class BrowserTests(unittest.TestCase):
             execute.assert_not_called()
             self.assertEqual(self.request('/api/templates/capture',valid),200)
             execute.assert_called_once_with('capture',{})
+
+    def test_program_routes_require_browser_protection(self):
+        from automation import programs
+        host='%s:%s' % self.server.server_address
+        valid={'Origin':'http://'+host,'X-Automaton-Control':'1','Content-Type':'application/json'}
+        with patch.object(programs,'read_status',return_value={'state':'idle'}) as status:
+            self.assertEqual(self.request('/api/programs/status'),403)
+            status.assert_not_called()
+            self.assertEqual(self.request('/api/programs/status',valid),200)
+            status.assert_called_once()

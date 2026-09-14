@@ -26,4 +26,6 @@ def main():
     stop = threading.Event()
     for sig in (signal.SIGTERM, signal.SIGINT):
         signal.signal(sig, lambda *_: stop.set())
-    run(stop)
+    from automation.program_worker import serve
+    logging.getLogger("automaton").info("Program worker ready; waiting for an explicit Run request")
+    serve(stop)

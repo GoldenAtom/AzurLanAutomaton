@@ -9,6 +9,7 @@ import cv2
 import config
 import utility
 from automation.manual import LOCK
+from core.action_lock import android_owner
 
 FRAMES = {}
 FRAME_LOCK = threading.Lock()
@@ -23,6 +24,10 @@ def png(image):
 
 
 def execute(action, payload):
+    with android_owner():
+        return _execute(action,payload)
+
+def _execute(action, payload):
     if action == "capture":
         if not LOCK.acquire(blocking=False):
             raise RuntimeError("Another Android action is running. Try again when it finishes.")
@@ -42,7 +47,7 @@ def execute(action, payload):
             FRAMES[token] = (now, frame)
         return {"token": token, "width": frame.shape[1], "height": frame.shape[0], "device": device,
                 "image": "data:image/png;base64,"+base64.b64encode(png(frame)).decode(),
-                "buttons": [b.value for b in utility.Button],
+                "buttons": [b["name"] for b in utility.manualOptions()["buttons"]], "numbers": ["oil"],
                 "screens": [s.value for s in utility.Screen if s != utility.Screen.UNKNOWN]}
     if action != "save":
         raise ValueError("Unknown template editor action")
@@ -50,7 +55,8 @@ def execute(action, payload):
     kind, name, variant = payload.get("kind"), payload.get("name"), payload.get("variant")
     allowed = {"buttons": [b.value for b in utility.Button],
                "screens": [s.value for s in utility.Screen if s != utility.Screen.UNKNOWN]}
-    if not isinstance(kind,str) or kind not in allowed or name not in allowed[kind]:
+    allowed["numbers"] = []
+    if not isinstance(kind,str) or kind not in allowed or not isinstance(name,str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}",name) or (kind=="screens" and name not in allowed[kind]):
         raise ValueError("Choose a valid button or screen")
     if not isinstance(variant,str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}",variant):
         raise ValueError("Variant must be 1–48 lowercase letters, digits, underscores or hyphens")

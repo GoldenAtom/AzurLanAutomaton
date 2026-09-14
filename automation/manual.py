@@ -8,6 +8,7 @@ import time
 import secrets
 import cv2
 import utility
+from core.action_lock import android_owner
 
 LOCK = threading.Lock()
 PREVIEW = None
@@ -21,7 +22,8 @@ def execute(action, payload):
     if not LOCK.acquire(blocking=False):
         raise RuntimeError("Another manual action is running. Wait for it to finish.")
     try:
-        return _execute(action, payload)
+        with android_owner():
+            return _execute(action, payload)
     finally:
         LOCK.release()
 
@@ -35,7 +37,7 @@ def _execute(action, payload):
     region = payload.get("region")
     if region is not None and (not isinstance(region, list) or len(region) != 4 or any(type(v) is not int for v in region)):
         raise ValueError("Region must contain four integer coordinates")
-    button = utility.Button(payload.get("button", "redo_sortie")) if action in {"find", "click"} else None
+    button = str(payload.get("button", "redo_sortie")) if action in {"find", "click"} else None
     if action == "tap_preview":
         token = payload.get("preview_token")
         if not PREVIEW or not isinstance(token, str) or not secrets.compare_digest(token, PREVIEW["token"]):
@@ -87,7 +89,7 @@ def _execute(action, payload):
         color = (70, 210, 90) if match.passed else (60, 150, 255)
         x, y = match.x - match.width // 2, match.y - match.height // 2
         cv2.rectangle(image, (x, y), (x + match.width, y + match.height), color, 3)
-        cv2.putText(image, f"{button.value} {match.score:.3f} / {threshold:.3f}",
+        cv2.putText(image, f"{button} {match.score:.3f} / {threshold:.3f}",
                     (max(0, x), max(25, y - 10)), cv2.FONT_HERSHEY_SIMPLEX, .7, color, 2)
     logging.getLogger("manual").info("%s", result)
     result["width"], result["height"] = image.shape[1], image.shape[0]

@@ -21,3 +21,6 @@ Thumbs.db
 .DS_Store
 # Browser-authored templates persist independently of Git updates
 local-templates/
+
+local-programs/
+local-runtime/

@@ -110,7 +110,13 @@ def launchGame():
 
 
 def manualOptions():
-    return {"buttons": [{"name": button.value, "templates": [p.name for p in buttons.template_files(button)]}
-                        for button in Button],
+    names = sorted({b.value for b in Button} | {p.name for p in (config.LOCAL_TEMPLATE_DIR / "buttons").glob("*") if p.is_dir()})
+    return {"buttons": [{"name": name, "templates": [p.name for p in buttons.template_files(name)]}
+                        for name in names],
             "screens": {screen.value: [p.name for p in screens._reference_files(screen)]
                         for screen in Screen if screen is not Screen.UNKNOWN}}
+
+
+def readNumber(source):
+    from core.numbers import read_number
+    return read_number(source)

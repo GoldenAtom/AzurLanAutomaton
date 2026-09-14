@@ -28,9 +28,9 @@
  canvas.addEventListener('pointercancel',()=>start=null);
  fields.forEach(field=>field.addEventListener('input',()=>{selection=fields.map(f=>Number(f.value));draw();}));
  el('crop-full').onclick=()=>setSelection([0,0,canvas.width,canvas.height]);
- function destination(){el('template-destination').textContent=`Save as: local-templates/${el('template-kind').value}/${el('template-name').value}/${el('template-variant').value}.png`;}
+ function destination(){el('template-destination').textContent=`Save as: local-templates/${el('template-kind').value}/${(el('template-new-name').value.trim()||el('template-name').value)}/${el('template-variant').value}.png`;}
  function names(){el('template-name').replaceChildren();for(const name of frame[el('template-kind').value]){const option=document.createElement('option');option.value=name;option.textContent=name;el('template-name').append(option);}destination();}
- el('template-kind').onchange=names;el('template-name').onchange=destination;el('template-variant').oninput=destination;
+ el('template-kind').onchange=names;el('template-new-name').oninput=destination;el('template-name').onchange=destination;el('template-variant').oninput=destination;
  el('editor-capture').onclick=async()=>{
   if(busy)return;busy=true;el('editor-capture').disabled=true;el('template-save').disabled=true;status('Capturing original Android pixels…');
   try{const result=await request('capture',{});const image=new Image();image.src=result.image;await image.decode();frame=result;source=image;selection=null;canvas.width=result.width;canvas.height=result.height;canvas.hidden=false;el('crop-fields').hidden=false;el('editor-size').textContent=` ${result.width} × ${result.height}`;el('template-download').hidden=true;names();draw();status('Drag a rectangle on the screenshot. This capture is available for 15 minutes.');}
@@ -38,8 +38,8 @@
  };
  el('template-save').onclick=async()=>{
   if(busy||!valid())return;busy=true;el('template-save').disabled=true;el('editor-capture').disabled=true;status('Saving lossless crop…');
-  try{const result=await request('save',{token:frame.token,region:selection,kind:el('template-kind').value,name:el('template-name').value,variant:el('template-variant').value});status(`${result.message} Saved ${result.path} (${result.width} × ${result.height}).`);el('template-download').href=result.image;el('template-download').download=result.filename;el('template-download').hidden=false;
-   if(el('template-kind').value==='buttons'){const name=el('template-name').value;let option=Array.from(el('button-name').options).find(o=>o.value===name);if(!option){option=document.createElement('option');option.value=name;el('button-name').append(option);}option.disabled=false;option.textContent=name+' (custom template)';el('button-name').value=name;}
+  try{const result=await request('save',{token:frame.token,region:selection,kind:el('template-kind').value,name:(el('template-new-name').value.trim()||el('template-name').value),variant:el('template-variant').value});status(`${result.message} Saved ${result.path} (${result.width} × ${result.height}).`);el('template-download').href=result.image;el('template-download').download=result.filename;el('template-download').hidden=false;
+   if(el('template-kind').value==='buttons'){const name=(el('template-new-name').value.trim()||el('template-name').value);let option=Array.from(el('button-name').options).find(o=>o.value===name);if(!option){option=document.createElement('option');option.value=name;el('button-name').append(option);}option.disabled=false;option.textContent=name+' (custom template)';el('button-name').value=name;}
   }catch(error){status(error.message);}finally{busy=false;el('editor-capture').disabled=false;draw();}
  };
 })();

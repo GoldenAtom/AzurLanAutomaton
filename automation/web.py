@@ -25,7 +25,9 @@ def status():
     props = command("systemctl", "--user", "show", UNIT, "--property=ActiveState,SubState,MainPID,ExecMainStatus")
     info = dict(line.split("=", 1) for line in props.splitlines() if "=" in line)
     info["revision"] = command("git", "-C", str(ROOT), "rev-parse", "--short", "HEAD")
-    info["mode"] = "idle (no game interaction)"
+    from automation.programs import read_status
+    run=read_status()
+    info["mode"] = ("program: "+run.get("name","")+(" (dry run)" if run.get("dry") else "")) if run.get("state") in ("running","queued") else "idle (no game interaction)"
     info["logs"] = command("journalctl", "--user", "-u", UNIT, "-n", "35", "--no-pager", "-o", "short-iso")
     info["updates"] = command("systemctl", "--user", "show", "azurlane-update.timer", "--property=ActiveState")
     info["update_logs"] = command("journalctl", "--user", "-u", "azurlane-update.service", "-n", "12", "--no-pager", "-o", "short-iso")
@@ -34,7 +36,7 @@ def status():
 
 class Handler(BaseHTTPRequestHandler):
     def reply(self, code, body, content_type="application/json"):
-        data = body.encode()
+        data = body if isinstance(body,bytes) else body.encode()
         self.send_response(code)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(data)))
@@ -59,6 +61,17 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(200, (ROOT / "automation" / "panel.html").read_text(), "text/html; charset=utf-8")
         elif self.path == "/template-editor.js":
             self.reply(200, (ROOT / "automation" / "template-editor.js").read_text(), "text/javascript; charset=utf-8")
+        elif self.path in ("/programs", "/programs.js"):
+            name="programs.html" if self.path=="/programs" else "programs.js"
+            mime="text/html; charset=utf-8" if name.endswith("html") else "text/javascript; charset=utf-8"
+            self.reply(200,(ROOT/"automation"/name).read_text(encoding="utf-8"),mime)
+        elif self.path.startswith("/vendor/blockly/"):
+            relative=self.path.removeprefix("/vendor/blockly/")
+            base=(ROOT/"automation/vendor/blockly").resolve();path=(base/relative).resolve()
+            if not path.is_relative_to(base) or not path.is_file():
+                self.reply(404,"{}");return
+            mime="text/javascript" if path.suffix==".js" else {".svg":"image/svg+xml",".png":"image/png",".gif":"image/gif",".mp3":"audio/mpeg",".wav":"audio/wav",".ogg":"audio/ogg"}.get(path.suffix,"application/octet-stream")
+            self.reply(200,path.read_bytes(),mime)
         elif self.path == "/api/status":
             try:
                 self.reply(200, json.dumps(status()))
@@ -76,16 +89,30 @@ class Handler(BaseHTTPRequestHandler):
                 or self.headers.get("Content-Type") != "application/json"):
             self.reply(403, '{"error":"Same-origin control required"}')
             return
-        if self.path.startswith(("/api/manual/", "/api/templates/")):
+        if self.path.startswith(("/api/manual/", "/api/templates/", "/api/programs/")):
             try:
                 length = int(self.headers.get("Content-Length", "0"))
-                if not 0 < length <= 4096:
+                if not 0 < length <= (500000 if self.path.startswith("/api/programs/") else 4096):
                     raise ValueError("Expected a JSON request of at most 4096 bytes")
                 self.connection.settimeout(10)
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict):
                     raise ValueError("Expected a JSON object")
-                if self.path.startswith("/api/templates/"):
+                if self.path.startswith("/api/programs/"):
+                    from automation import programs
+                    action=self.path.removeprefix("/api/programs/")
+                    if action=="catalog":
+                        import utility
+                        result={"names":programs.list_programs(),"buttons":utility.manualOptions()["buttons"],"numbers":[p.name for p in (utility.config.LOCAL_TEMPLATE_DIR/"numbers").glob("*") if p.is_dir()]}
+                    elif action=="load":result=programs.load(payload.get("name"))
+                    elif action=="save":result=programs.save(payload.get("name"),payload.get("program"))
+                    elif action=="status":result=programs.read_status()
+                    elif action=="stop":result=programs.stop()
+                    elif action=="run":
+                        command("systemctl","--user","start",UNIT)
+                        result=programs.queue(payload.get("name"),payload.get("dry",False),payload.get("max_seconds",43200))
+                    else:raise ValueError("Unknown program action")
+                elif self.path.startswith("/api/templates/"):
                     from automation.template_editor import execute
                     result = execute(self.path.removeprefix("/api/templates/"), payload)
                 else:
@@ -103,6 +130,9 @@ class Handler(BaseHTTPRequestHandler):
             self.reply(404, "{}")
             return
         try:
+            if action in ("stop","restart"):
+                from automation import programs
+                programs.stop()
             command("systemctl", "--user", action, UNIT)
             logging.getLogger("control").info("Browser requested %s from %s", action, self.client_address[0])
             self.reply(200, '{"ok":true}')

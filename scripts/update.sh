@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 cd "$HOME/AzurLanAutomaton"
+mkdir -p local-runtime
+exec 8>local-runtime/android.lock
+flock -n 8 || { echo "Program or manual action active; update deferred"; exit 0; }
 exec 9>"$HOME/.config/azurlane/update.lock"
 flock -n 9 || exit 0
 [[ $(git branch --show-current) == main ]] || { echo 'Refusing update: branch is not main'; exit 1; }

@@ -123,3 +123,37 @@ Use **Capture for template**, drag a rectangle on the lossless screenshot, and a
 Templates are stored on the appliance under `local-templates/buttons/<target>/<variant>.png` or `local-templates/screens/<target>/<variant>.png`, with JSON capture metadata. This folder is ignored by Git and survives automatic updates without making the checkout dirty. It is local data: back it up separately or deliberately promote selected templates into the repository. Files with an existing variant name are not overwritten. Editor capture tokens expire after 15 minutes; at most three screenshots are retained in memory, and service restarts clear them.
 
 If custom templates exist for a target, they replace that target's bundled templates during matching. Other targets are unchanged. Saving a button crop enables/selects it in the manual controls. Cropped screen references compare only the saved area at the original framebuffer resolution; a resolution mismatch is skipped. Pick distinctive static graphics rather than changing numbers, animated backgrounds, or broad empty regions. Use full-screen selection when a complete screen reference is desired.
+
+## Visual programs (Blockly)
+
+Open `/programs` for the local, offline Blockly editor. Drag blocks under the single Start block, choose a program name, and Save. Programs are JSON data interpreted by the bot service; no generated Python/JavaScript is executed. Available blocks include Press (boolean result), Wait, Wait for button with timeout, If/Else, Repeat, bounded While, Call program, Return, variables/comparisons, numeric OCR, native-coordinate Tap, Log and End with error.
+
+Press and Wait for button assign `last_result`. Call assigns the child's returned value to `last_result`. Variables are shared across calls within one run, and reset for the next run. Missing buttons return false; failed input commands stop the run rather than repeating taps. Read failures while waiting for buttons return false and can reconnect on the next poll. A missing/unreadable number fails the run; it is not guessed or treated as zero.
+
+**Run saved** starts an explicit run in `azurlane-bot.service`. Editing/saving programs does not change that run: the called program library is snapshotted at start. Closing the browser does not stop a run. **Stop program** cancels at the next check; an in-flight ADB command can take its configured timeout. Stopping/restarting the bot service also ends the run. Crashed/interrupted runs are never automatically resumed or replayed. The default overall run limit is 12 hours, configurable up to 24 hours. Calls cannot recurse; loops and waits are bounded; each run has a 200,000-block step budget.
+
+Programs, run requests, status and stop markers live in ignored `local-programs/` and `local-runtime/`. Saving keeps ten prior revisions per program under `local-programs/history/`. Export/import JSON is available. Back up local authored data separately. Updates defer while a program/manual operation owns Android. Manual actions and template capture/save are excluded while a program runs to prevent competing input or changed templates.
+
+**Dry run saved** uses simulated false button results, numeric reads of zero and shortened Wait blocks. It does not contact Android. It checks the executed branch, not every possible branch. Review all branches and test navigation in short runs before long unattended operation.
+
+Examples in the editor:
+- Safe demo: log, wait one second, log.
+- Farm skeleton: intentionally begins with an error block until you author and test the navigation. It demonstrates press/branch/wait/return; it is not a completed 4-8 route.
+- Oil supervisor: read `oil`; if greater than 3000, call saved `farm_4_8` four times, stopping if a child returns false. Save the child first. This only checks oil before the four calls; insert additional reads if each repetition needs a resource check.
+
+### Named assets and numeric values
+
+The template editor accepts a new button target name (for example `farm_start`) without editing Python enums. Existing named buttons remain compatible. Select **Number / OCR**, set a new target name such as `oil`, and crop just the current digits (exclude icons, maximum capacity and other labels). The latest numeric variant supplies the screen region. Numeric values use Tesseract with a digits whitelist and minimum confidence; compact K/M notation is not parsed. Resolution must match the saved crop.
+
+The appliance has Tesseract 5.3.0 and English data extracted into `~/.local/share/azurlane/ocr`, using existing Debian native libraries. `bash scripts/install-ocr-user.sh` reproduces that user-local installation. System `tesseract` is used when available. No system/Waydroid services are reconfigured by OCR setup.
+
+### Implementation boundaries
+
+- `automation/programs.py`: validated data format, saved definitions, call graph checks and interpreter.
+- `automation/program_worker.py`: bot service execution and utility-backed Android adapter.
+- `automation/programs.js`: Blockly blocks, workspace serialization and translation to validated program data.
+- `core/action_lock.py`: cross-process Android ownership.
+- `core/numbers.py`: strict numeric crop OCR.
+- `automation/vendor/blockly/`: pinned Blockly 13.3.0 with license; no runtime CDN dependency.
+
+Tests use fake Android adapters for branching, calls, cancellation, dry-run isolation, limits and failed reads. A passing test suite does not certify any authored farming route or OCR crop against the game.

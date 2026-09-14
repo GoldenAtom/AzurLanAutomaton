@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
+import re
 
 import numpy as np
 
@@ -19,15 +20,16 @@ class Button(str, Enum):
     REDO_SORTIE = "redo_sortie"
 
 
-def _coerce_button(button: Button | str) -> Button:
-    if isinstance(button, Button):
-        return button
-    return Button(str(button).lower())
+def _coerce_button(button):
+    name=button.value if isinstance(button,Button) else str(button).lower()
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}",name):
+        raise ValueError("Invalid button name")
+    return name
 
 
 def template_path(button: Button | str) -> Path:
     button = _coerce_button(button)
-    return config.BUTTON_TEMPLATE_DIR / f"{button.value}.png"
+    return config.BUTTON_TEMPLATE_DIR / f"{button}.png"
 
 
 def locate_button(
@@ -46,7 +48,7 @@ def locate_button(
 
 
 def template_files(button):
-    name = _coerce_button(button).value
+    name = _coerce_button(button)
     custom = sorted((config.LOCAL_TEMPLATE_DIR / "buttons" / name).glob("*.png"))
     if custom:
         return custom
@@ -63,7 +65,7 @@ def template_files(button):
 def inspect_button(button, screen, threshold=config.DEFAULT_BUTTON_THRESHOLD, region=None):
     files = template_files(button)
     if not files:
-        raise FileNotFoundError("No templates installed for " + _coerce_button(button).value)
+        raise FileNotFoundError("No templates installed for " + _coerce_button(button))
     matches = [vision.best_template(screen, vision.load_image(path), threshold, region) for path in files]
     return max(matches, key=lambda match: match.score)
 
