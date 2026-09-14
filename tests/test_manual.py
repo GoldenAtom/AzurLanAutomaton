@@ -91,3 +91,9 @@ class AdbTests(unittest.TestCase):
         with patch.object(adb, '_device', 'stale'), patch.object(adb, 'run_text', side_effect=RuntimeError('offline')), patch.object(adb, 'connect', return_value=True) as connect:
             self.assertTrue(adb.is_alive())
             connect.assert_called_once()
+
+class CompatibilityTests(unittest.TestCase):
+    def test_missing_template_stays_false_for_existing_exists_api(self):
+        from core import buttons
+        with patch.object(buttons, 'template_files', return_value=[]):
+            self.assertFalse(buttons.button_exists('confirm', np.zeros((10,10,3), dtype=np.uint8)))

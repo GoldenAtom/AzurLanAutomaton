@@ -39,6 +39,8 @@ def locate_button(
     if screen is None:
         screen = adb.screenshot()
 
+    if not template_files(button):
+        return None
     match = inspect_button(button, screen, threshold, region)
     return match if match is not None and match.passed else None
 
