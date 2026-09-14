@@ -17,6 +17,11 @@ class Match:
     y: int
     width: int
     height: int
+    threshold: float = 0.90
+
+    @property
+    def passed(self) -> bool:
+        return self.score >= self.threshold
 
 
 def load_image(path: str | Path, unchanged: bool = True) -> np.ndarray:
@@ -45,14 +50,18 @@ def _template_and_mask(template: np.ndarray) -> tuple[np.ndarray, np.ndarray | N
     return template, None
 
 
-def find_template(
+def best_template(
     screen: np.ndarray,
     template: np.ndarray,
     threshold: float = 0.90,
     region: Region | None = None,
 ) -> Match | None:
+    if not np.isfinite(threshold) or not 0 <= threshold <= 1:
+        raise ValueError("Threshold must be between 0 and 1")
     if region is not None:
         x1, y1, x2, y2 = region
+        if not (0 <= x1 < x2 <= screen.shape[1] and 0 <= y1 < y2 <= screen.shape[0]):
+            raise ValueError("Region must lie inside the screenshot")
         search = screen[y1:y2, x1:x2]
         offset_x, offset_y = x1, y1
     else:
@@ -70,17 +79,23 @@ def find_template(
     sh, sw = search.shape[:2]
 
     if tw > sw or th > sh:
-        return None
+        raise ValueError("Template is larger than the search region")
 
+    if mask is not None and not np.any(mask):
+        raise ValueError("Template is entirely transparent")
     if mask is not None:
         result = cv2.matchTemplate(search, template_bgr, cv2.TM_CCORR_NORMED, mask=mask)
     else:
+        # Constant templates produce meaningless perfect CCOEFF scores.
+        if np.all(np.std(template_bgr.astype(float), axis=(0, 1)) < 1e-6):
+            raise ValueError("Template has no visual variation")
         result = cv2.matchTemplate(search, template_bgr, cv2.TM_CCOEFF_NORMED)
 
+    finite = np.isfinite(result)
+    if not np.any(finite):
+        raise ValueError("No finite template scores")
+    result = np.where(finite, result, -1.0)
     _, score, _, location = cv2.minMaxLoc(result)
-
-    if not np.isfinite(score) or score < threshold:
-        return None
 
     return Match(
         score=float(score),
@@ -88,7 +103,14 @@ def find_template(
         y=offset_y + location[1] + th // 2,
         width=tw,
         height=th,
+        threshold=threshold,
     )
+
+
+def find_template(screen, template, threshold=0.90, region=None):
+    """Compatibility API: only return accepted matches."""
+    match = best_template(screen, template, threshold, region)
+    return match if match.passed else None
 
 
 def image_similarity(a: np.ndarray, b: np.ndarray, size: tuple[int, int] = (320, 180)) -> float:

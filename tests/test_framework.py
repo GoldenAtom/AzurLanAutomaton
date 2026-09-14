@@ -64,3 +64,15 @@ class BrowserTests(unittest.TestCase):
         with patch.object(web, "command") as command:
             self.assertEqual(self.request("/api/start", headers), 403)
             command.assert_not_called()
+
+    def test_manual_routes_require_browser_protection(self):
+        from automation import manual
+        host = '%s:%s' % self.server.server_address
+        valid = {'Origin': 'http://' + host, 'X-Automaton-Control': '1', 'Content-Type': 'application/json'}
+        with patch.object(manual, 'execute', return_value={'ok': True}) as execute:
+            for route in ['screenshot', 'click', 'identify', 'back']:
+                for headers in [{}, {**valid, 'Origin': 'http://other.example'}, {**valid, 'X-Automaton-Control': ''}]:
+                    self.assertEqual(self.request('/api/manual/' + route, headers), 403)
+            execute.assert_not_called()
+            self.assertEqual(self.request('/api/manual/screenshot', valid), 200)
+            execute.assert_called_once_with('screenshot', {})

@@ -93,3 +93,17 @@ Logs rotate at 2 MB with three backups per runtime; systemd also captures logs i
 ADB now defaults to `adb` from PATH. Set `AUTOMATON_ADB_PATH` for BlueStacks and `AUTOMATON_ADB_DEVICE` for a specific device. An empty device uses ADB's single-device selection (multiple devices fail rather than guessing). Discover/connect Waydroid before enabling any future game behaviour; idle mode does not depend on an internal IP. ADB commands have bounded timeouts.
 
 Validation: `python3 -m unittest discover -s tests -v`.
+
+## Manual Android utilities
+
+The browser includes Connect ADB, Refresh screenshot, Identify screen, Find button, Press matched button, Android Back/Home, and Open Azur Lane. These explicit manual commands work independently of the idle bot service. Stop controls the background bot; manual controls remain available. Controls are for trusted LAN clients; the listener address and existing Host/Origin/header checks are unchanged.
+
+Manual tools require OpenCV and NumPy (`python3-opencv python3-numpy adb` on Debian, already present on this appliance). Development can use `python -m pip install numpy opencv-python`. The updater tests these dependencies before applying a release.
+
+ADB uses `AUTOMATON_ADB_DEVICE` when configured. Otherwise, with Waydroid installed, it discovers the current IP from `waydroid status` and connects on port 5555. Other hosts require exactly one ready ADB device. Each manual request checks a fresh connection. Environment overrides belong in `~/.config/azurlane/automaton.env`.
+
+Find shows best-match center coordinates, template size, score, threshold and pass/fail, including below-threshold results. Optional bounds are `x1,y1,x2,y2` at native resolution. Press captures and matches a fresh frame, taps once only when it passes, and displays the annotated pre-tap frame. Refresh screenshot to inspect the resulting UI. Requests are serialized; input commands are never automatically retried.
+
+Button templates support `name.png`, `name_*.png`, and `name/*.png`. Existing battle variants are recognized. Missing-template buttons are disabled after Connect. The existing `main_menu.png` reference maps to HOME; `sleep.png` has no defined state and stays unused. Screen identification retains broad image similarity: scores are diagnostics, not calibrated probabilities. Templates and thresholds need tuning. Identification never triggers automatic input.
+
+New utility facade operations: `inspectButton`, `connectADB`, `pressKey`, `launchGame`, `manualOptions`. Manual request logs are in `logs/control.log` and `journalctl --user -u azurlane-web`.

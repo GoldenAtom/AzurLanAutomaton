@@ -36,6 +36,11 @@ def _reference_files(screen: Screen) -> list[Path]:
     if single.exists():
         files.append(single)
 
+    if screen is Screen.HOME:
+        legacy = config.SCREEN_TEMPLATE_DIR / "main_menu.png"
+        if legacy.exists():
+            files.append(legacy)
+
     variants = config.SCREEN_TEMPLATE_DIR / screen.value
     if variants.is_dir():
         files.extend(sorted(variants.glob("*.png")))

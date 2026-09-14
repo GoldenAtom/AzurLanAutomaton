@@ -74,6 +74,24 @@ class Handler(BaseHTTPRequestHandler):
                 or self.headers.get("Content-Type") != "application/json"):
             self.reply(403, '{"error":"Same-origin control required"}')
             return
+        if self.path.startswith("/api/manual/"):
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= 4096:
+                    raise ValueError("Expected a JSON request of at most 4096 bytes")
+                self.connection.settimeout(10)
+                payload = json.loads(self.rfile.read(length))
+                if not isinstance(payload, dict):
+                    raise ValueError("Expected a JSON object")
+                from automation.manual import execute
+                result = execute(self.path.removeprefix("/api/manual/"), payload)
+                self.reply(200, json.dumps(result, allow_nan=False))
+            except (ValueError, KeyError) as exc:
+                self.reply(400, json.dumps({"error": str(exc)}))
+            except Exception as exc:
+                logging.getLogger("manual").exception("Manual request failed")
+                self.reply(503, json.dumps({"error": str(exc)}))
+            return
         action = self.path.removeprefix("/api/")
         if action not in ACTIONS or self.path != "/api/" + action:
             self.reply(404, "{}")

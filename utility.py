@@ -86,3 +86,30 @@ get_timer = getTimer
 restart_game = restartGame
 adb_alive = adbAlive
 save_debug = saveDebug
+
+
+def inspectButton(button, screen=None, threshold=config.DEFAULT_BUTTON_THRESHOLD, region=None):
+    """Best match details, including below-threshold results; never taps."""
+    if screen is None:
+        screen = getScreenshot()
+    return buttons.inspect_button(button, screen, threshold, region)
+
+
+def connectADB():
+    adb.connect()
+    return adb.device_name()
+
+
+def pressKey(key):
+    adb.keyevent(key)
+
+
+def launchGame():
+    adb.launch()
+
+
+def manualOptions():
+    return {"buttons": [{"name": button.value, "templates": [p.name for p in buttons.template_files(button)]}
+                        for button in Button],
+            "screens": {screen.value: [p.name for p in screens._reference_files(screen)]
+                        for screen in Screen if screen is not Screen.UNKNOWN}}

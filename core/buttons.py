@@ -39,12 +39,28 @@ def locate_button(
     if screen is None:
         screen = adb.screenshot()
 
-    path = template_path(button)
-    if not path.exists():
-        return None
+    match = inspect_button(button, screen, threshold, region)
+    return match if match is not None and match.passed else None
 
-    template = vision.load_image(path)
-    return vision.find_template(screen, template, threshold=threshold, region=region)
+
+def template_files(button):
+    name = _coerce_button(button).value
+    files = list(config.BUTTON_TEMPLATE_DIR.glob(name + "_*.png"))
+    direct = template_path(button)
+    if direct.exists():
+        files.append(direct)
+    variants = config.BUTTON_TEMPLATE_DIR / name
+    if variants.is_dir():
+        files.extend(variants.glob("*.png"))
+    return sorted(files)
+
+
+def inspect_button(button, screen, threshold=config.DEFAULT_BUTTON_THRESHOLD, region=None):
+    files = template_files(button)
+    if not files:
+        raise FileNotFoundError("No templates installed for " + _coerce_button(button).value)
+    matches = [vision.best_template(screen, vision.load_image(path), threshold, region) for path in files]
+    return max(matches, key=lambda match: match.score)
 
 
 def button_exists(

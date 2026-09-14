@@ -1,10 +1,50 @@
 <!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Azur Lane Automaton</title>
-<style>body{background:#101822;color:#e4ecf5;font:16px system-ui;margin:40px auto;padding:0 24px;max-width:1000px}h1{font-size:32px}section{background:#1b2939;padding:24px;border-radius:16px;margin:20px 0}button{font:inherit;padding:12px 25px;border:0;border-radius:8px;margin:6px;background:#80d5cc;color:#11242a;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;color:#b7cce0}#error{color:#ffb5ac}a{color:#80d5cc}</style>
+<style>body{background:#101822;color:#e4ecf5;font:16px system-ui;margin:40px auto;padding:0 24px;max-width:1000px}h1{font-size:32px}section{background:#1b2939;padding:24px;border-radius:16px;margin:20px 0}button{font:inherit;padding:12px 25px;border:0;border-radius:8px;margin:6px;background:#80d5cc;color:#11242a;cursor:pointer}button:disabled{opacity:.5}pre{white-space:pre-wrap;overflow-wrap:anywhere;font-size:13px;color:#b7cce0}#error{color:#ffb5ac}a{color:#80d5cc}select,input{font:inherit;padding:8px;background:#101822;color:#e4ecf5;border:1px solid #53708d;border-radius:6px}label{display:inline-block;margin:8px}#shot{max-width:100%;height:auto;border-radius:8px}#manual-error{color:#ffb5ac}.secondary{background:#adc5e0}</style>
 <h1>Azur Lane Automaton</h1><p>Debian appliance · Framework preview</p>
 <section><h2 id="state">Connecting…</h2><p id="details"></p><p>Idle mode is active. Running the service performs no game actions.</p><button onclick="control('start')">Start</button><button onclick="control('stop')">Stop</button><button onclick="control('restart')">Restart</button><p id="error" role="alert"></p></section>
+<section id="manual"><h2>Manual Android controls</h2>
+<p id="adb-state">Connect to discover the Android device and available templates.</p>
+<button onclick="manual('connect')">Connect ADB</button><button onclick="manual('screenshot')">Refresh screenshot</button>
+<label>Screen threshold <input id="screen-threshold" type="number" min="0" max="1" step=".01" value=".72"></label><button onclick="manual('identify')">Identify screen</button>
+<hr><label>Button <select id="button-name"><option value="redo_sortie">redo_sortie</option></select></label>
+<label>Button threshold <input id="button-threshold" type="number" min="0" max="1" step=".01" value=".93"></label>
+<label>Search region (optional x1,y1,x2,y2) <input id="region" placeholder="0,0,1920,1080"></label>
+<button onclick="manual('find')">Find button</button><button onclick="manual('click')">Press matched button</button>
+<p>Find only inspects. Press captures a fresh image and taps once only if the match passes your threshold. Coordinates use the full Android screenshot.</p>
+<button class="secondary" onclick="manual('back')">Android Back</button><button class="secondary" onclick="manual('home')">Android Home</button><button class="secondary" onclick="manual('launch')">Open Azur Lane</button>
+<p id="manual-error" role="alert"></p><pre id="manual-result">No manual action yet.</pre><p id="frame-label"></p><img id="shot" alt="Android screenshot" hidden>
+<details><summary>Installed screen references</summary><pre id="references"></pre></details></section>
 <section><h2>Service log</h2><pre id="logs"></pre></section><section><h2>Automatic updates</h2><p>Checks main every five minutes. Validated updates restart services that are running.</p><pre id="updates"></pre><pre id="update_logs"></pre></section>
 <script>
 async function refresh(){try{const r=await fetch('/api/status');const s=await r.json();if(!r.ok)throw Error(s.error);document.getElementById('state').textContent=s.ActiveState+' · '+s.SubState;document.getElementById('details').textContent='Revision '+s.revision+' · PID '+s.MainPID+' · '+s.mode;for(const key of ['logs','updates','update_logs'])document.getElementById(key).textContent=s[key];document.getElementById('error').textContent='';}catch(e){document.getElementById('state').textContent='Connection unavailable';document.getElementById('error').textContent=e.message;}}
-async function control(action){document.querySelectorAll('button').forEach(b=>b.disabled=true);try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Automaton-Control':'1'},body:'{}'});const s=await r.json();if(!r.ok)throw Error(s.error);await refresh();}catch(e){document.getElementById('error').textContent=e.message;}finally{document.querySelectorAll('button').forEach(b=>b.disabled=false);}}
+async function control(action){document.querySelectorAll('button:not(#manual button)').forEach(b=>b.disabled=true);try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Automaton-Control':'1'},body:'{}'});const s=await r.json();if(!r.ok)throw Error(s.error);await refresh();}catch(e){document.getElementById('error').textContent=e.message;}finally{document.querySelectorAll('button:not(#manual button)').forEach(b=>b.disabled=false);}}
+let manualBusy=false;
+async function manual(action){
+ if(manualBusy)return;
+ manualBusy=true;document.querySelectorAll('#manual button').forEach(b=>b.disabled=true);
+ document.getElementById('manual-error').textContent='';
+ document.getElementById('manual-result').textContent='Running '+action+'…';
+ try{
+  const payload={};
+  if(action==='identify')payload.threshold=Number(document.getElementById('screen-threshold').value);
+  if(action==='find'||action==='click'){
+   payload.button=document.getElementById('button-name').value;
+   payload.threshold=Number(document.getElementById('button-threshold').value);
+   const region=document.getElementById('region').value.trim();
+   if(region)payload.region=region.split(',').map(v=>Number(v.trim()));
+  }
+  const response=await fetch('/api/manual/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Automaton-Control':'1'},body:JSON.stringify(payload)});
+  const result=await response.json();if(!response.ok)throw Error(result.error);
+  document.getElementById('adb-state').textContent='Connected: '+result.device;
+  if(result.buttons){
+   const select=document.getElementById('button-name');select.replaceChildren();
+   for(const button of result.buttons){const option=document.createElement('option');option.value=button.name;option.textContent=button.name+(button.templates.length?' ('+button.templates.length+' templates)':' — no template');option.disabled=!button.templates.length;select.append(option);}
+   select.value='redo_sortie';document.getElementById('references').textContent=JSON.stringify(result.screens,null,2);
+  }
+  if(result.image){document.getElementById('shot').src=result.image;document.getElementById('shot').hidden=false;document.getElementById('frame-label').textContent=result.frame+' · '+result.width+'×'+result.height;delete result.image;}
+  document.getElementById('manual-result').textContent=JSON.stringify(result,null,2);
+ }catch(e){document.getElementById('manual-error').textContent=e.message;document.getElementById('manual-result').textContent='Request failed. No input command is automatically retried.';}
+ finally{manualBusy=false;document.querySelectorAll('#manual button').forEach(b=>b.disabled=false);}
+}
 refresh();setInterval(refresh,5000);
 </script></html>
