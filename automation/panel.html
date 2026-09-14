@@ -9,16 +9,16 @@
 <hr><label>Button <select id="button-name"><option value="redo_sortie">redo_sortie</option></select></label>
 <label>Button threshold <input id="button-threshold" type="number" min="0" max="1" step=".01" value=".93"></label>
 <label>Search region (optional x1,y1,x2,y2) <input id="region" placeholder="0,0,1920,1080"></label>
-<button onclick="manual('find')">Find button</button><button onclick="manual('click')">Press matched button</button>
+<button onclick="manual('find')">Find button</button><button onclick="manual('click')">Press if threshold passes</button><button id="tap-preview" class="secondary" onclick="manual('tap_preview')" disabled>Tap preview location (manual)</button>
 <p>Find only inspects. Press captures a fresh image and taps once only if the match passes your threshold. Coordinates use the full Android screenshot.</p>
 <button class="secondary" onclick="manual('back')">Android Back</button><button class="secondary" onclick="manual('home')">Android Home</button><button class="secondary" onclick="manual('launch')">Open Azur Lane</button>
-<p id="manual-error" role="alert"></p><pre id="manual-result">No manual action yet.</pre><p id="frame-label"></p><img id="shot" alt="Android screenshot" hidden>
+<p id="manual-message" role="status"></p><p>Manual preview tap uses the displayed location regardless of confidence. Check the rectangle first; the preview expires after 30 seconds.</p><p id="manual-error" role="alert"></p><pre id="manual-result">No manual action yet.</pre><p id="frame-label"></p><img id="shot" alt="Android screenshot" hidden>
 <details><summary>Installed screen references</summary><pre id="references"></pre></details></section>
 <section><h2>Service log</h2><pre id="logs"></pre></section><section><h2>Automatic updates</h2><p>Checks main every five minutes. Validated updates restart services that are running.</p><pre id="updates"></pre><pre id="update_logs"></pre></section>
 <script>
 async function refresh(){try{const r=await fetch('/api/status');const s=await r.json();if(!r.ok)throw Error(s.error);document.getElementById('state').textContent=s.ActiveState+' · '+s.SubState;document.getElementById('details').textContent='Revision '+s.revision+' · PID '+s.MainPID+' · '+s.mode;for(const key of ['logs','updates','update_logs'])document.getElementById(key).textContent=s[key];document.getElementById('error').textContent='';}catch(e){document.getElementById('state').textContent='Connection unavailable';document.getElementById('error').textContent=e.message;}}
 async function control(action){document.querySelectorAll('button:not(#manual button)').forEach(b=>b.disabled=true);try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Automaton-Control':'1'},body:'{}'});const s=await r.json();if(!r.ok)throw Error(s.error);await refresh();}catch(e){document.getElementById('error').textContent=e.message;}finally{document.querySelectorAll('button:not(#manual button)').forEach(b=>b.disabled=false);}}
-let manualBusy=false;
+let manualBusy=false; let previewToken=null; let previewTimer=null;
 async function manual(action){
  if(manualBusy)return;
  manualBusy=true;document.querySelectorAll('#manual button').forEach(b=>b.disabled=true);
@@ -26,6 +26,8 @@ async function manual(action){
  document.getElementById('manual-result').textContent='Running '+action+'…';
  try{
   const payload={};
+  if(action==='tap_preview')payload.preview_token=previewToken;
+  previewToken=null;clearTimeout(previewTimer);
   if(action==='identify')payload.threshold=Number(document.getElementById('screen-threshold').value);
   if(action==='find'||action==='click'){
    payload.button=document.getElementById('button-name').value;
@@ -35,6 +37,8 @@ async function manual(action){
   }
   const response=await fetch('/api/manual/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Automaton-Control':'1'},body:JSON.stringify(payload)});
   const result=await response.json();if(!response.ok)throw Error(result.error);
+  document.getElementById('manual-message').textContent=result.message||'';
+  if(result.preview_token){previewToken=result.preview_token;previewTimer=setTimeout(()=>{previewToken=null;document.getElementById('tap-preview').disabled=true;},result.preview_expires_seconds*1000);delete result.preview_token;}
   document.getElementById('adb-state').textContent='Connected: '+result.device;
   if(result.buttons){
    const select=document.getElementById('button-name');select.replaceChildren();
@@ -44,7 +48,7 @@ async function manual(action){
   if(result.image){document.getElementById('shot').src=result.image;document.getElementById('shot').hidden=false;document.getElementById('frame-label').textContent=result.frame+' · '+result.width+'×'+result.height;delete result.image;}
   document.getElementById('manual-result').textContent=JSON.stringify(result,null,2);
  }catch(e){document.getElementById('manual-error').textContent=e.message;document.getElementById('manual-result').textContent='Request failed. No input command is automatically retried.';}
- finally{manualBusy=false;document.querySelectorAll('#manual button').forEach(b=>b.disabled=false);}
+ finally{manualBusy=false;document.querySelectorAll('#manual button').forEach(b=>b.disabled=false);document.getElementById('tap-preview').disabled=!previewToken;}
 }
 refresh();setInterval(refresh,5000);
 </script></html>

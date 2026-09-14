@@ -107,3 +107,11 @@ Find shows best-match center coordinates, template size, score, threshold and pa
 Button templates support `name.png`, `name_*.png`, and `name/*.png`. Existing battle variants are recognized. Missing-template buttons are disabled after Connect. The existing `main_menu.png` reference maps to HOME; `sleep.png` has no defined state and stays unused. Screen identification retains broad image similarity: scores are diagnostics, not calibrated probabilities. Templates and thresholds need tuning. Identification never triggers automatic input.
 
 New utility facade operations: `inspectButton`, `connectADB`, `pressKey`, `launchGame`, `manualOptions`. Manual request logs are in `logs/control.log` and `journalctl --user -u azurlane-web`.
+
+### Responsive previews and explicit manual taps
+
+Capture uses Android's uncompressed RGBA screenshot format (12/16-byte headers), falling back to PNG for unsupported formats. Matching searches eight quarter-resolution candidates and refines them at native resolution; thresholds use native-resolution scores. This candidate search can differ from exhaustive matching on difficult images; `vision.best_template(..., fast=False)` remains available for comparison. Browser previews are 960-pixel-wide JPEGs; detection and tap coordinates remain full resolution. Warm connections use a readiness check rather than repeating discovery on every action.
+
+A blocked press now says NO TAP and shows the score/threshold explicitly. After Find or a rejected press, **Tap preview location (manual)** lets the operator use the displayed match regardless of confidence. It never chooses a new match. The server-issued token expires in 30 seconds, is consumed before input, and is invalidated by another manual request or a device change. Check the displayed rectangle and ensure the game screen has not moved before using it. Refresh screenshot after a tap to inspect the outcome. The threshold-checked action remains separate.
+
+Measured on this Debian host: raw capture about 0.35 seconds; complete battle Find requests about 1.06 seconds (previous capture plus matching alone was about 5.3 seconds). Actual timing depends on image/device load. Responses expose `elapsed_ms`.

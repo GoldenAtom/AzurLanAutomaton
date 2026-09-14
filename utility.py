@@ -95,8 +95,9 @@ def inspectButton(button, screen=None, threshold=config.DEFAULT_BUTTON_THRESHOLD
     return buttons.inspect_button(button, screen, threshold, region)
 
 
-def connectADB():
-    adb.connect()
+def connectADB(force=False):
+    if force or not adb.is_alive():
+        adb.connect()
     return adb.device_name()
 
 

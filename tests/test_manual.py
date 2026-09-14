@@ -97,3 +97,43 @@ class CompatibilityTests(unittest.TestCase):
         from core import buttons
         with patch.object(buttons, 'template_files', return_value=[]):
             self.assertFalse(buttons.button_exists('confirm', np.zeros((10,10,3), dtype=np.uint8)))
+
+class PerformanceRegressionTests(unittest.TestCase):
+    def test_raw_android_headers_and_channel_order(self):
+        import struct
+        rgba = bytes([10,20,30,255,40,50,60,255])
+        for header in [struct.pack('<3I',2,1,1), struct.pack('<4I',2,1,1,1)]:
+            image=adb.decode_raw_screenshot(header+rgba)
+            self.assertEqual(image.tolist(), [[[30,20,10],[60,50,40]]])
+        with self.assertRaises(ValueError):
+            adb.decode_raw_screenshot(b'bad')
+
+    def test_fast_match_matches_full_resolution_with_alpha(self):
+        rng=np.random.default_rng(92)
+        screen=rng.integers(0,255,(500,800,3),dtype=np.uint8)
+        template=screen[285:405,550:710].copy()
+        alpha=np.full((120,160),255,dtype=np.uint8)
+        alpha[:15]=0
+        template=np.dstack((template,alpha))
+        full=vision.best_template(screen,template,fast=False)
+        fast=vision.best_template(screen,template,fast=True)
+        self.assertEqual((fast.x,fast.y),(full.x,full.y))
+        self.assertAlmostEqual(fast.score,full.score,places=5)
+
+    def test_preview_tap_is_explicit_and_one_use(self):
+        import time
+        preview={'token':'test-token','created':time.monotonic(),'device':'device','x':60,'y':40}
+        with patch.object(manual,'PREVIEW',preview), patch.object(manual.utility,'connectADB',return_value='device'), patch.object(manual.utility,'tap') as tap:
+            result=manual.execute('tap_preview',{'preview_token':'test-token'})
+            self.assertTrue(result['clicked'])
+            tap.assert_called_once_with(60,40)
+            with self.assertRaises(ValueError):
+                manual.execute('tap_preview',{'preview_token':'test-token'})
+
+    def test_preview_expiry_and_wrong_token_never_tap(self):
+        import time
+        for token,created in [('wrong',time.monotonic()),('test-token',time.monotonic()-31)]:
+            with patch.object(manual,'PREVIEW',{'token':'test-token','created':created,'device':'device','x':60,'y':40}), patch.object(manual.utility,'tap') as tap:
+                with self.assertRaises(ValueError):
+                    manual.execute('tap_preview',{'preview_token':token})
+                tap.assert_not_called()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import subprocess
 import time
+import struct
 import ipaddress
 import logging
 import re
@@ -86,14 +87,30 @@ def is_alive() -> bool:
         return False
 
 
+def decode_raw_screenshot(raw):
+    if len(raw) < 12:
+        raise ValueError("Short raw screenshot")
+    width, height, format_id = struct.unpack_from("<3I", raw)
+    if not (0 < width <= 16384 and 0 < height <= 16384) or format_id not in (1, 2):
+        raise ValueError("Unsupported raw screenshot format")
+    header = len(raw) - width * height * 4
+    if header not in (12, 16):
+        raise ValueError("Unexpected raw screenshot size")
+    rgba = np.frombuffer(raw, np.uint8, offset=header).reshape(height, width, 4)
+    return cv2.cvtColor(rgba, cv2.COLOR_RGBA2BGR)
+
+
 def screenshot() -> np.ndarray:
-    raw = run_bytes("exec-out", "screencap", "-p")
-    image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
-
-    if image is None:
-        raise RuntimeError("ADB screenshot could not be decoded.")
-
-    return image
+    raw = run_bytes("exec-out", "screencap")
+    try:
+        return decode_raw_screenshot(raw)
+    except ValueError:
+        # Older/non-RGBA Android builds retain the portable PNG path.
+        raw = run_bytes("exec-out", "screencap", "-p")
+        image = cv2.imdecode(np.frombuffer(raw, np.uint8), cv2.IMREAD_COLOR)
+        if image is None:
+            raise RuntimeError("ADB screenshot could not be decoded.")
+        return image
 
 
 def tap(x: int | float, y: int | float) -> None:
