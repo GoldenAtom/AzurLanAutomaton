@@ -20,3 +20,5 @@ DEFAULT_SCREEN_THRESHOLD = 0.72
 
 # x1, y1, x2, y2. Tune once the exact battle-timer crop is settled.
 BATTLE_TIMER_REGION = (1600, 20, 1820, 125)
+
+LOCAL_TEMPLATE_DIR = BASE_DIR / "local-templates"

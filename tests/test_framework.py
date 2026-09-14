@@ -76,3 +76,14 @@ class BrowserTests(unittest.TestCase):
             execute.assert_not_called()
             self.assertEqual(self.request('/api/manual/screenshot', valid), 200)
             execute.assert_called_once_with('screenshot', {})
+
+    def test_template_routes_require_browser_protection(self):
+        from automation import template_editor
+        host='%s:%s' % self.server.server_address
+        valid={'Origin':'http://'+host,'X-Automaton-Control':'1','Content-Type':'application/json'}
+        with patch.object(template_editor,'execute',return_value={'ok':True}) as execute:
+            for route in ['capture','save']:
+                self.assertEqual(self.request('/api/templates/'+route),403)
+            execute.assert_not_called()
+            self.assertEqual(self.request('/api/templates/capture',valid),200)
+            execute.assert_called_once_with('capture',{})

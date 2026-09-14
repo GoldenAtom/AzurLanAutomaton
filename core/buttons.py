@@ -47,6 +47,9 @@ def locate_button(
 
 def template_files(button):
     name = _coerce_button(button).value
+    custom = sorted((config.LOCAL_TEMPLATE_DIR / "buttons" / name).glob("*.png"))
+    if custom:
+        return custom
     files = list(config.BUTTON_TEMPLATE_DIR.glob(name + "_*.png"))
     direct = template_path(button)
     if direct.exists():

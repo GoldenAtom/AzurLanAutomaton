@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+import json
 
 import numpy as np
 
@@ -30,6 +31,9 @@ class ScreenMatch:
 
 
 def _reference_files(screen: Screen) -> list[Path]:
+    custom = sorted((config.LOCAL_TEMPLATE_DIR / "screens" / screen.value).glob("*.png"))
+    if custom:
+        return custom
     files: list[Path] = []
 
     single = config.SCREEN_TEMPLATE_DIR / f"{screen.value}.png"
@@ -63,7 +67,13 @@ def identify_screen_details(
 
         for path in _reference_files(screen):
             reference = vision.load_image(path, unchanged=False)
-            score = vision.image_similarity(screen_image, reference)
+            search_image = screen_image
+            if path.is_relative_to(config.LOCAL_TEMPLATE_DIR):
+                metadata = json.loads(path.with_suffix(".json").read_text())
+                if metadata["frame_size"] != [screen_image.shape[1], screen_image.shape[0]]:
+                    continue
+                search_image = vision.crop(screen_image, tuple(metadata["region"]))
+            score = vision.image_similarity(search_image, reference)
 
             if score > best.score:
                 best = ScreenMatch(screen, score, path)

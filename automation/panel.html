@@ -14,10 +14,26 @@
 <button class="secondary" onclick="manual('back')">Android Back</button><button class="secondary" onclick="manual('home')">Android Home</button><button class="secondary" onclick="manual('launch')">Open Azur Lane</button>
 <p id="manual-message" role="status"></p><p>Manual preview tap uses the displayed location regardless of confidence. Check the rectangle first; the preview expires after 30 seconds.</p><p id="manual-error" role="alert"></p><pre id="manual-result">No manual action yet.</pre><p id="frame-label"></p><img id="shot" alt="Android screenshot" hidden>
 <details><summary>Installed screen references</summary><pre id="references"></pre></details></section>
+<section id="editor"><h2>Template editor</h2>
+<p>Capture a screenshot, then drag around a distinctive, stable part of the button. Crops save the original pixels as lossless PNG.</p>
+<button id="editor-capture">Capture for template</button><span id="editor-size"></span>
+<div style="overflow:auto"><canvas id="crop-canvas" style="max-width:100%;height:auto;touch-action:none;cursor:crosshair" aria-label="Drag to select a template crop" hidden></canvas></div>
+<div id="crop-fields" hidden>
+<label>Left <input id="crop-x1" type="number" min="0" value="0" style="width:85px"></label>
+<label>Top <input id="crop-y1" type="number" min="0" value="0" style="width:85px"></label>
+<label>Right <input id="crop-x2" type="number" min="0" value="0" style="width:85px"></label>
+<label>Bottom <input id="crop-y2" type="number" min="0" value="0" style="width:85px"></label>
+<button id="crop-full">Select full screen</button>
+<p id="crop-size"></p><canvas id="crop-preview" style="max-width:100%;height:auto;background:#101822" aria-label="Selected crop preview"></canvas>
+<div><label>Template type <select id="template-kind"><option value="buttons">Button</option><option value="screens">Screen area</option></select></label>
+<label>Target <select id="template-name"></select></label><label>Variant <input id="template-variant" value="custom" pattern="[a-z0-9][a-z0-9_-]{0,47}" maxlength="48"></label></div>
+<p id="template-destination"></p><p>Saved crops become active immediately and survive updates. Custom variants replace the bundled templates for this target. Existing files are never overwritten.</p>
+<button id="template-save" disabled>Save template</button><a id="template-download" hidden>Download saved PNG</a></div>
+<p id="editor-status" role="status"></p></section>
 <section><h2>Service log</h2><pre id="logs"></pre></section><section><h2>Automatic updates</h2><p>Checks main every five minutes. Validated updates restart services that are running.</p><pre id="updates"></pre><pre id="update_logs"></pre></section>
 <script>
 async function refresh(){try{const r=await fetch('/api/status');const s=await r.json();if(!r.ok)throw Error(s.error);document.getElementById('state').textContent=s.ActiveState+' · '+s.SubState;document.getElementById('details').textContent='Revision '+s.revision+' · PID '+s.MainPID+' · '+s.mode;for(const key of ['logs','updates','update_logs'])document.getElementById(key).textContent=s[key];document.getElementById('error').textContent='';}catch(e){document.getElementById('state').textContent='Connection unavailable';document.getElementById('error').textContent=e.message;}}
-async function control(action){document.querySelectorAll('button:not(#manual button)').forEach(b=>b.disabled=true);try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Automaton-Control':'1'},body:'{}'});const s=await r.json();if(!r.ok)throw Error(s.error);await refresh();}catch(e){document.getElementById('error').textContent=e.message;}finally{document.querySelectorAll('button:not(#manual button)').forEach(b=>b.disabled=false);}}
+async function control(action){document.querySelectorAll('section:first-of-type button').forEach(b=>b.disabled=true);try{const r=await fetch('/api/'+action,{method:'POST',headers:{'Content-Type':'application/json','X-Automaton-Control':'1'},body:'{}'});const s=await r.json();if(!r.ok)throw Error(s.error);await refresh();}catch(e){document.getElementById('error').textContent=e.message;}finally{document.querySelectorAll('section:first-of-type button').forEach(b=>b.disabled=false);}}
 let manualBusy=false; let previewToken=null; let previewTimer=null;
 async function manual(action){
  if(manualBusy)return;
@@ -51,4 +67,4 @@ async function manual(action){
  finally{manualBusy=false;document.querySelectorAll('#manual button').forEach(b=>b.disabled=false);document.getElementById('tap-preview').disabled=!previewToken;}
 }
 refresh();setInterval(refresh,5000);
-</script></html>
+</script><script src="/template-editor.js"></script></html>

@@ -57,6 +57,8 @@ class Handler(BaseHTTPRequestHandler):
             return
         if self.path == "/":
             self.reply(200, (ROOT / "automation" / "panel.html").read_text(), "text/html; charset=utf-8")
+        elif self.path == "/template-editor.js":
+            self.reply(200, (ROOT / "automation" / "template-editor.js").read_text(), "text/javascript; charset=utf-8")
         elif self.path == "/api/status":
             try:
                 self.reply(200, json.dumps(status()))
@@ -74,7 +76,7 @@ class Handler(BaseHTTPRequestHandler):
                 or self.headers.get("Content-Type") != "application/json"):
             self.reply(403, '{"error":"Same-origin control required"}')
             return
-        if self.path.startswith("/api/manual/"):
+        if self.path.startswith(("/api/manual/", "/api/templates/")):
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 if not 0 < length <= 4096:
@@ -83,8 +85,12 @@ class Handler(BaseHTTPRequestHandler):
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict):
                     raise ValueError("Expected a JSON object")
-                from automation.manual import execute
-                result = execute(self.path.removeprefix("/api/manual/"), payload)
+                if self.path.startswith("/api/templates/"):
+                    from automation.template_editor import execute
+                    result = execute(self.path.removeprefix("/api/templates/"), payload)
+                else:
+                    from automation.manual import execute
+                    result = execute(self.path.removeprefix("/api/manual/"), payload)
                 self.reply(200, json.dumps(result, allow_nan=False))
             except (ValueError, KeyError) as exc:
                 self.reply(400, json.dumps({"error": str(exc)}))
