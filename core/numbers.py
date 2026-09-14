@@ -9,12 +9,12 @@ import shutil
 import subprocess
 import cv2
 import config
-from core import adb
+from core import adb,assets
 
 def read_number(source):
-    if not isinstance(source,str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}",source):
-        raise ValueError("Invalid numeric source")
-    candidates=list((config.LOCAL_TEMPLATE_DIR/"numbers"/source).glob("*.json"))
+    target,name=assets.split(source)
+    directory=assets.target_directory("numbers",target,name) if target else config.LOCAL_TEMPLATE_DIR/"numbers"/name
+    candidates=list(directory.glob("*.json"))
     if not candidates: raise ValueError("Create a Number crop named "+source+" in the template editor first")
     metadata=json.loads(max(candidates,key=lambda p:p.stat().st_mtime_ns).read_text())
     frame=adb.screenshot()

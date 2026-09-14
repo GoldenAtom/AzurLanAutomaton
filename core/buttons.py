@@ -7,7 +7,7 @@ import re
 import numpy as np
 
 import config
-from core import adb, vision
+from core import adb, assets, vision
 
 
 class Button(str, Enum):
@@ -22,13 +22,14 @@ class Button(str, Enum):
 
 def _coerce_button(button):
     name=button.value if isinstance(button,Button) else str(button).lower()
-    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}",name):
-        raise ValueError("Invalid button name")
+    assets.split(name)
     return name
 
 
 def template_path(button: Button | str) -> Path:
     button = _coerce_button(button)
+    if "/" in button:
+        raise ValueError("Target-folder buttons do not have a bundled template path")
     return config.BUTTON_TEMPLATE_DIR / f"{button}.png"
 
 
@@ -49,6 +50,8 @@ def locate_button(
 
 def template_files(button):
     name = _coerce_button(button)
+    authored=assets.authored_files("buttons",name)
+    if "/" in name:return authored
     custom = sorted((config.LOCAL_TEMPLATE_DIR / "buttons" / name).glob("*.png"))
     if custom:
         return custom

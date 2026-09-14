@@ -34,6 +34,11 @@ class InterpreterTests(unittest.TestCase):
         adapter=Mock();adapter.visible.return_value=True
         engine=self.execute([{'op':'wait_button','button':'battle','threshold':.9,'timeout':1,'interval':.2}],adapter)
         self.assertTrue(engine.state['variables']['last_result'])
+    def test_target_screen_wait_uses_qualified_dropdown_value(self):
+        adapter=Mock();adapter.screen_visible.return_value=True
+        engine=self.execute([{'op':'wait_screen','screen':'battle/campaign_selector','threshold':.72,'timeout':1,'interval':.2}],adapter)
+        self.assertTrue(engine.state['variables']['last_result'])
+        adapter.screen_visible.assert_called_once_with('battle/campaign_selector',.72)
     def test_cancel_interrupts_wait(self):
         started=time.monotonic()
         with self.assertRaises(programs.Stopped):self.execute([{'op':'wait','seconds':100}],cancel=lambda:time.monotonic()-started>.05)
@@ -50,7 +55,7 @@ class InterpreterTests(unittest.TestCase):
         engine=programs.Interpreter(library,Mock());library['main']['steps'][0]['value']['value']=5;engine.call('main')
         self.assertEqual(engine.state['variables']['x'],1)
     def test_unknown_operations_and_invalid_limits_rejected(self):
-        for node in [{'op':'exec','code':'print(1)'},{'op':'wait','seconds':float('nan')},{'op':'repeat','count':1.5,'body':[]},{'op':'call','program':'../../bad'}]:
+        for node in [{'op':'exec','code':'print(1)'},{'op':'wait','seconds':float('nan')},{'op':'repeat','count':1.5,'body':[]},{'op':'call','program':'../../bad'},{'op':'press','button':'battle/menu/start','threshold':.9}]:
             with self.assertRaises(ValueError):programs.validate(doc([node]))
     def test_unreadable_number_ends_run(self):
         adapter=Mock();adapter.read_number.side_effect=ValueError('unreadable')

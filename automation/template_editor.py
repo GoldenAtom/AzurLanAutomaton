@@ -9,6 +9,7 @@ import cv2
 import config
 import utility
 from automation.manual import LOCK
+from core import assets
 from core.action_lock import android_owner
 
 FRAMES = {}
@@ -47,17 +48,13 @@ def _execute(action, payload):
             FRAMES[token] = (now, frame)
         return {"token": token, "width": frame.shape[1], "height": frame.shape[0], "device": device,
                 "image": "data:image/png;base64,"+base64.b64encode(png(frame)).decode(),
-                "buttons": [b["name"] for b in utility.manualOptions()["buttons"]], "numbers": ["oil"],
-                "screens": [s.value for s in utility.Screen if s != utility.Screen.UNKNOWN]}
+                "assets":utility.assetOptions(),"targets":assets.target_catalog()}
     if action != "save":
         raise ValueError("Unknown template editor action")
     token = payload.get("token")
-    kind, name, variant = payload.get("kind"), payload.get("name"), payload.get("variant")
-    allowed = {"buttons": [b.value for b in utility.Button],
-               "screens": [s.value for s in utility.Screen if s != utility.Screen.UNKNOWN]}
-    allowed["numbers"] = []
-    if not isinstance(kind,str) or kind not in allowed or not isinstance(name,str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}",name) or (kind=="screens" and name not in allowed[kind]):
-        raise ValueError("Choose a valid button or screen")
+    kind, target, name, variant = payload.get("kind"),payload.get("target"),payload.get("name"),payload.get("variant")
+    if kind not in assets.KINDS:raise ValueError("Choose a valid template type")
+    assets.slug(target,"target folder");assets.slug(name,"template name")
     if not isinstance(variant,str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}",variant):
         raise ValueError("Variant must be 1–48 lowercase letters, digits, underscores or hyphens")
     region = payload.get("region")
@@ -74,14 +71,14 @@ def _execute(action, payload):
         if x2-x1 < 4 or y2-y1 < 4:
             raise ValueError("Crop must be at least 4 by 4 pixels")
         image=frame[y1:y2,x1:x2].copy()
-        directory=config.LOCAL_TEMPLATE_DIR/kind/name
+        directory=assets.target_directory(kind,target,name)
         directory.mkdir(parents=True,exist_ok=True)
         path=directory/(variant+".png")
         meta=path.with_suffix(".json")
         if path.exists() or meta.exists():
             raise ValueError("That variant already exists. Choose a new name; existing templates are preserved.")
         data=png(image)
-        metadata={"region":region,"frame_size":[frame.shape[1],frame.shape[0]],"kind":kind,"name":name}
+        metadata={"region":region,"frame_size":[frame.shape[1],frame.shape[0]],"kind":kind,"target":target,"name":name}
         # Write metadata before exposing the PNG to template discovery.
         with meta.open("x",encoding="utf-8") as output:
             json.dump(metadata,output)
@@ -91,6 +88,6 @@ def _execute(action, payload):
         except Exception:
             meta.unlink(missing_ok=True)
             raise
-    return {"message":"Saved and active immediately. Custom variants replace bundled templates for this name.",
+    return {"message":"Saved and active immediately in target folder "+target+".",
             "path":str(path.relative_to(config.BASE_DIR)),"width":x2-x1,"height":y2-y1,
             "image":"data:image/png;base64,"+base64.b64encode(data).decode(),"filename":path.name}

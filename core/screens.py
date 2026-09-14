@@ -8,7 +8,7 @@ import json
 import numpy as np
 
 import config
-from core import adb, vision
+from core import adb, assets, vision
 
 
 class Screen(str, Enum):
@@ -50,6 +50,32 @@ def _reference_files(screen: Screen) -> list[Path]:
         files.extend(sorted(variants.glob("*.png")))
 
     return files
+
+
+def reference_files(reference) -> list[Path]:
+    target,name=assets.split(reference)
+    if target is not None:return assets.authored_files("screens",reference)
+    try:return _reference_files(Screen(name))
+    except ValueError:return sorted((config.LOCAL_TEMPLATE_DIR/"screens"/name).glob("*.png"))
+
+
+def inspect_reference(reference,screen_image=None,threshold=config.DEFAULT_SCREEN_THRESHOLD):
+    if screen_image is None:screen_image=adb.screenshot()
+    matches=[]
+    for path in reference_files(reference):
+        image=vision.load_image(path,unchanged=False);search=screen_image
+        if path.is_relative_to(config.LOCAL_TEMPLATE_DIR):
+            metadata=json.loads(path.with_suffix(".json").read_text())
+            if metadata["frame_size"] != [screen_image.shape[1],screen_image.shape[0]]:continue
+            search=vision.crop(screen_image,tuple(metadata["region"]))
+        matches.append((vision.image_similarity(search,image),path))
+    if not matches:raise FileNotFoundError("No screen templates installed for "+reference)
+    score,path=max(matches,key=lambda item:item[0])
+    return {"score":score,"passed":score>=threshold,"reference":path}
+
+
+def screen_visible(reference,screen_image=None,threshold=config.DEFAULT_SCREEN_THRESHOLD):
+    return inspect_reference(reference,screen_image,threshold)["passed"]
 
 
 def identify_screen_details(

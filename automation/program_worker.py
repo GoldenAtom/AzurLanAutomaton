@@ -22,9 +22,13 @@ class Android:
         utility.connectADB();frame=utility.getScreenshot()
         if not (0<=x<frame.shape[1] and 0<=y<frame.shape[0]):raise ValueError("Tap coordinates outside framebuffer")
         utility.tap(x,y)
-    def screen(self):
+    def screen_visible(self,name,threshold):
         import utility
-        utility.connectADB();return utility.identifyScreen().value
+        try:
+            utility.connectADB();return utility.screenVisible(name,utility.getScreenshot(),threshold)
+        except (OSError,RuntimeError) as exc:
+            logging.getLogger("program").warning("Screen read unavailable: %s",exc)
+            return False
     def read_number(self,name):
         import utility
         utility.connectADB();return utility.readNumber(name)["value"]

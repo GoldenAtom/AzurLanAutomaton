@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 
 import config
-from core import adb, buttons, screens, timer, vision
+from core import adb, assets, buttons, screens, timer, vision
 from core.buttons import Button
 from core.screens import Screen, ScreenMatch
 from core.timer import BattleTimerWatch
@@ -56,6 +56,10 @@ def identifyScreenDetails(
     threshold: float = config.DEFAULT_SCREEN_THRESHOLD,
 ) -> ScreenMatch:
     return screens.identify_screen_details(screen, threshold)
+
+
+def screenVisible(reference,screen=None,threshold=config.DEFAULT_SCREEN_THRESHOLD):
+    return screens.screen_visible(reference,screen,threshold)
 
 
 def getTimer(screen: np.ndarray | None = None) -> int | None:
@@ -111,10 +115,20 @@ def launchGame():
 
 def manualOptions():
     names = sorted({b.value for b in Button} | {p.name for p in (config.LOCAL_TEMPLATE_DIR / "buttons").glob("*") if p.is_dir()})
-    return {"buttons": [{"name": name, "templates": [p.name for p in buttons.template_files(name)]}
-                        for name in names],
+    return {"buttons": [{"name": name,"value":name,"label":"Legacy / "+name,"target":None,"templates": [p.name for p in buttons.template_files(name)]}
+                        for name in names]+assets.target_options("buttons"),
             "screens": {screen.value: [p.name for p in screens._reference_files(screen)]
                         for screen in Screen if screen is not Screen.UNKNOWN}}
+
+
+def assetOptions():
+    manual=manualOptions()
+    legacy_screens=[{"value":name,"label":"Legacy / "+name,"target":None,"name":name,"templates":files}
+                    for name,files in manual["screens"].items()]
+    legacy_numbers=[{"value":p.name,"label":"Legacy / "+p.name,"target":None,"name":p.name,"templates":[f.name for f in p.glob("*.png")]}
+                    for p in sorted((config.LOCAL_TEMPLATE_DIR/"numbers").glob("*")) if p.is_dir()]
+    return {"buttons":manual["buttons"],"screens":legacy_screens+assets.target_options("screens"),
+            "numbers":legacy_numbers+assets.target_options("numbers"),"targets":assets.target_catalog()}
 
 
 def readNumber(source):

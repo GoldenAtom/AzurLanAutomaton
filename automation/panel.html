@@ -25,9 +25,10 @@
 <label>Bottom <input id="crop-y2" type="number" min="0" value="0" style="width:85px"></label>
 <button id="crop-full">Select full screen</button>
 <p id="crop-size"></p><canvas id="crop-preview" style="max-width:100%;height:auto;background:#101822" aria-label="Selected crop preview"></canvas>
-<div><label>Template type <select id="template-kind"><option value="buttons">Button</option><option value="screens">Screen area</option><option value="numbers">Number / OCR</option></select></label>
-<label>Target <select id="template-name"></select></label><label>New target name (optional) <input id="template-new-name" placeholder="farm_start or oil"></label><label>Variant <input id="template-variant" value="custom" pattern="[a-z0-9][a-z0-9_-]{0,47}" maxlength="48"></label></div>
-<p id="template-destination"></p><p>Saved crops become active immediately and survive updates. Custom variants replace the bundled templates for this target. Existing files are never overwritten.</p>
+<div><label>Target folder <select id="template-target"></select></label><label>New target folder (optional) <input id="template-new-target" placeholder="battle"></label>
+<label>Template type <select id="template-kind"><option value="buttons">Button</option><option value="screens">Screen area</option><option value="numbers">Number / OCR</option></select></label>
+<label>Template <select id="template-name"></select></label><label>New template name (optional) <input id="template-new-name" placeholder="campaign_selector"></label><label>Variant <input id="template-variant" value="custom" pattern="[a-z0-9][a-z0-9_-]{0,47}" maxlength="48"></label></div>
+<p id="template-destination"></p><p>Each target folder contains its own buttons, screens and numeric crops. Saved variants become active immediately and survive updates. Existing files are never overwritten.</p>
 <button id="template-save" disabled>Save template</button><a id="template-download" hidden>Download saved PNG</a></div>
 <p id="editor-status" role="status"></p></section>
 <section><h2>Service log</h2><pre id="logs"></pre></section><section><h2>Automatic updates</h2><p>Checks main every five minutes. Validated updates restart services that are running.</p><pre id="updates"></pre><pre id="update_logs"></pre></section>
@@ -58,7 +59,7 @@ async function manual(action){
   document.getElementById('adb-state').textContent='Connected: '+result.device;
   if(result.buttons){
    const select=document.getElementById('button-name');select.replaceChildren();
-   for(const button of result.buttons){const option=document.createElement('option');option.value=button.name;option.textContent=button.name+(button.templates.length?' ('+button.templates.length+' templates)':' — no template');option.disabled=!button.templates.length;select.append(option);}
+   for(const button of result.buttons){const option=document.createElement('option');option.value=button.value||button.name;option.textContent=(button.label||button.name)+(button.templates.length?' ('+button.templates.length+' templates)':' — no template');option.disabled=!button.templates.length;select.append(option);}
    select.value='redo_sortie';document.getElementById('references').textContent=JSON.stringify(result.screens,null,2);
   }
   if(result.image){document.getElementById('shot').src=result.image;document.getElementById('shot').hidden=false;document.getElementById('frame-label').textContent=result.frame+' · '+result.width+'×'+result.height;delete result.image;}

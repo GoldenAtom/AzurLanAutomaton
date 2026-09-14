@@ -103,7 +103,7 @@ class Handler(BaseHTTPRequestHandler):
                     action=self.path.removeprefix("/api/programs/")
                     if action=="catalog":
                         import utility
-                        result={"names":programs.list_programs(),"buttons":utility.manualOptions()["buttons"],"numbers":[p.name for p in (utility.config.LOCAL_TEMPLATE_DIR/"numbers").glob("*") if p.is_dir()]}
+                        result={"names":programs.list_programs(),**utility.assetOptions()}
                     elif action=="load":result=programs.load(payload.get("name"))
                     elif action=="save":result=programs.save(payload.get("name"),payload.get("program"))
                     elif action=="status":result=programs.read_status()

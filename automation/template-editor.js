@@ -28,18 +28,23 @@
  canvas.addEventListener('pointercancel',()=>start=null);
  fields.forEach(field=>field.addEventListener('input',()=>{selection=fields.map(f=>Number(f.value));draw();}));
  el('crop-full').onclick=()=>setSelection([0,0,canvas.width,canvas.height]);
- function destination(){el('template-destination').textContent=`Save as: local-templates/${el('template-kind').value}/${(el('template-new-name').value.trim()||el('template-name').value)}/${el('template-variant').value}.png`;}
- function names(){el('template-name').replaceChildren();for(const name of frame[el('template-kind').value]){const option=document.createElement('option');option.value=name;option.textContent=name;el('template-name').append(option);}destination();}
- el('template-kind').onchange=names;el('template-new-name').oninput=destination;el('template-name').onchange=destination;el('template-variant').oninput=destination;
+ function target(){return el('template-new-target').value.trim()||el('template-target').value;}
+ function templateName(){return el('template-new-name').value.trim()||el('template-name').value;}
+ function destination(){el('template-destination').textContent=`Save as: local-templates/targets/${target()}/${el('template-kind').value}/${templateName()}/${el('template-variant').value}.png`;}
+ function names(){el('template-name').replaceChildren();const kind=el('template-kind').value,selected=target();for(const asset of frame.assets[kind].filter(item=>item.target===selected)){const option=document.createElement('option');option.value=asset.name;option.textContent=asset.name;el('template-name').append(option);}destination();}
+ function targets(){const select=el('template-target'),previous=select.value;select.replaceChildren();const values=Object.keys(frame.targets);if(!values.length)values.push('general');for(const name of values){const option=document.createElement('option');option.value=name;option.textContent=name;select.append(option);}if(values.includes(previous))select.value=previous;names();}
+ el('template-kind').onchange=names;el('template-target').onchange=names;el('template-new-target').oninput=names;el('template-new-name').oninput=destination;el('template-name').onchange=destination;el('template-variant').oninput=destination;
  el('editor-capture').onclick=async()=>{
   if(busy)return;busy=true;el('editor-capture').disabled=true;el('template-save').disabled=true;status('Capturing original Android pixels…');
-  try{const result=await request('capture',{});const image=new Image();image.src=result.image;await image.decode();frame=result;source=image;selection=null;canvas.width=result.width;canvas.height=result.height;canvas.hidden=false;el('crop-fields').hidden=false;el('editor-size').textContent=` ${result.width} × ${result.height}`;el('template-download').hidden=true;names();draw();status('Drag a rectangle on the screenshot. This capture is available for 15 minutes.');}
+  try{const result=await request('capture',{});const image=new Image();image.src=result.image;await image.decode();frame=result;source=image;selection=null;canvas.width=result.width;canvas.height=result.height;canvas.hidden=false;el('crop-fields').hidden=false;el('editor-size').textContent=` ${result.width} × ${result.height}`;el('template-download').hidden=true;targets();draw();status('Drag a rectangle on the screenshot. This capture is available for 15 minutes.');}
   catch(error){status(error.message);}finally{busy=false;el('editor-capture').disabled=false;draw();}
  };
  el('template-save').onclick=async()=>{
   if(busy||!valid())return;busy=true;el('template-save').disabled=true;el('editor-capture').disabled=true;status('Saving lossless crop…');
-  try{const result=await request('save',{token:frame.token,region:selection,kind:el('template-kind').value,name:(el('template-new-name').value.trim()||el('template-name').value),variant:el('template-variant').value});status(`${result.message} Saved ${result.path} (${result.width} × ${result.height}).`);el('template-download').href=result.image;el('template-download').download=result.filename;el('template-download').hidden=false;
-   if(el('template-kind').value==='buttons'){const name=(el('template-new-name').value.trim()||el('template-name').value);let option=Array.from(el('button-name').options).find(o=>o.value===name);if(!option){option=document.createElement('option');option.value=name;el('button-name').append(option);}option.disabled=false;option.textContent=name+' (custom template)';el('button-name').value=name;}
+  try{const folder=target(),name=templateName(),kind=el('template-kind').value;const result=await request('save',{token:frame.token,region:selection,kind,target:folder,name,variant:el('template-variant').value});status(`${result.message} Saved ${result.path} (${result.width} × ${result.height}).`);el('template-download').href=result.image;el('template-download').download=result.filename;el('template-download').hidden=false;
+   if(!frame.targets[folder])frame.targets[folder]={buttons:[],screens:[],numbers:[]};if(!frame.targets[folder][kind].includes(name))frame.targets[folder][kind].push(name);if(!frame.assets[kind].some(item=>item.value===folder+'/'+name))frame.assets[kind].push({value:folder+'/'+name,label:folder+' / '+name,target:folder,name,templates:[result.filename]});
+   el('template-new-target').value='';el('template-new-name').value='';targets();el('template-target').value=folder;names();el('template-name').value=name;
+   if(kind==='buttons'){const value=folder+'/'+name;let option=Array.from(el('button-name').options).find(o=>o.value===value);if(!option){option=document.createElement('option');option.value=value;el('button-name').append(option);}option.disabled=false;option.textContent=folder+' / '+name+' (custom template)';el('button-name').value=value;}
   }catch(error){status(error.message);}finally{busy=false;el('editor-capture').disabled=false;draw();}
  };
 })();

@@ -26,6 +26,12 @@ def slug(name):
     return name
 
 
+def asset_reference(name):
+    from core.assets import split
+    split(name)
+    return name
+
+
 def atomic(path,value):
     temporary=path.with_name(path.name+"."+secrets.token_hex(4)+".tmp")
     try:
@@ -59,10 +65,8 @@ def validate(program):
         elif op=="compare":
             if e.get("test") not in (">",">=","<","<=","==","!="):raise ValueError("Invalid comparison")
             expr(e.get("left"),depth+1);expr(e.get("right"),depth+1)
-        elif op=="visible":slug(e.get("button"));number(e.get("threshold"),0,1)
-        elif op=="screen":
-            from core.screens import Screen
-            Screen(e.get("name"))
+        elif op=="visible":asset_reference(e.get("button"));number(e.get("threshold"),0,1)
+        elif op=="screen":asset_reference(e.get("name"));number(e.get("threshold",.72),0,1)
         elif op=="not":expr(e.get("value"),depth+1)
         else:raise ValueError("Unknown expression: "+str(op))
     def blocks(items,depth=0):
@@ -74,8 +78,9 @@ def validate(program):
             op=node.get("op")
             if op=="wait":number(node.get("seconds"))
             elif op in ("press","wait_button"):
-                slug(node.get("button"));number(node.get("threshold"),0,1)
+                asset_reference(node.get("button"));number(node.get("threshold"),0,1)
                 if op=="wait_button":number(node.get("timeout"),.1,3600);number(node.get("interval"),.2,60)
+            elif op=="wait_screen":asset_reference(node.get("screen"));number(node.get("threshold"),0,1);number(node.get("timeout"),.1,3600);number(node.get("interval"),.2,60)
             elif op=="tap":number(node.get("x"),0,16383);number(node.get("y"),0,16383)
             elif op=="if":expr(node.get("condition"),0);blocks(node.get("then"),depth+1);blocks(node.get("else"),depth+1)
             elif op=="repeat":
@@ -85,7 +90,7 @@ def validate(program):
             elif op=="while":expr(node.get("condition"),0);number(node.get("timeout"),.1,86400);blocks(node.get("body"),depth+1)
             elif op=="call":slug(node.get("program"))
             elif op=="set":slug(node.get("variable"));expr(node.get("value"),0)
-            elif op=="read_number":slug(node.get("source"));slug(node.get("variable"))
+            elif op=="read_number":asset_reference(node.get("source"));slug(node.get("variable"))
             elif op=="return":expr(node.get("value"),0)
             elif op in ("log","fail"):
                 if not isinstance(node.get("message"),str) or len(node["message"])>500:raise ValueError("Invalid message")
@@ -186,7 +191,7 @@ class Interpreter:
             if node["name"] not in v:raise ValueError("Variable not set: "+node["name"])
             return v[node["name"]]
         if op=="visible":return False if self.dry else self.adapter.visible(node["button"],node["threshold"])
-        if op=="screen":return False if self.dry else self.adapter.screen()==node["name"]
+        if op=="screen":return False if self.dry else self.adapter.screen_visible(node["name"],node.get("threshold",.72))
         if op=="not":return not self.expression(node["value"])
         a=self.expression(node["left"]);b=self.expression(node["right"])
         return {">":lambda:a>b,">=":lambda:a>=b,"<":lambda:a<b,"<=":lambda:a<=b,"==":lambda:a==b,"!=":lambda:a!=b}[node["test"]]()
@@ -212,6 +217,13 @@ class Interpreter:
                 while not self.dry:
                     self.check()
                     if self.adapter.visible(node["button"],node["threshold"]):v["last_result"]=True;break
+                    if time.monotonic()>=end:break
+                    self.wait(min(node["interval"],max(0,end-time.monotonic())))
+            elif op=="wait_screen":
+                end=time.monotonic()+node["timeout"];v["last_result"]=False
+                while not self.dry:
+                    self.check()
+                    if self.adapter.screen_visible(node["screen"],node["threshold"]):v["last_result"]=True;break
                     if time.monotonic()>=end:break
                     self.wait(min(node["interval"],max(0,end-time.monotonic())))
             elif op=="if":self.sequence(node["then"] if self.expression(node["condition"]) else node["else"],depth)
