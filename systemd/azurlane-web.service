@@ -1,0 +1,16 @@
+[Unit]
+Description=Azur Lane browser controls
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+WorkingDirectory=%h/AzurLanAutomaton
+EnvironmentFile=%h/.config/azurlane/automaton.env
+ExecStart=/usr/bin/python3 -u -m automation.web
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

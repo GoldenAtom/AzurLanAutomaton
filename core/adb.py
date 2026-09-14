@@ -14,8 +14,8 @@ def _creation_flags() -> int:
 
 
 def run_bytes(*args: str) -> bytes:
-    cmd = [config.ADB_PATH, "-s", config.DEVICE, *args]
-    return subprocess.check_output(cmd, creationflags=_creation_flags())
+    cmd = [config.ADB_PATH, *(["-s", config.DEVICE] if config.DEVICE else []), *args]
+    return subprocess.check_output(cmd, creationflags=_creation_flags(), timeout=15)
 
 
 def run_text(*args: str) -> str:
@@ -24,6 +24,8 @@ def run_text(*args: str) -> str:
 
 def connect() -> bool:
     try:
+        if not config.DEVICE:
+            return run_text("shell", "echo", "alive") == "alive"
         subprocess.run(
             [config.ADB_PATH, "connect", config.DEVICE],
             stdout=subprocess.PIPE,

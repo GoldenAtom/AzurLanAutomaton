@@ -1,0 +1,10 @@
+[Unit]
+Description=Check automaton main branch every five minutes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=5min
+Unit=azurlane-update.service
+
+[Install]
+WantedBy=timers.target

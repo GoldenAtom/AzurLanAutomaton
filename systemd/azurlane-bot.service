@@ -1,0 +1,16 @@
+[Unit]
+Description=Azur Lane automaton (idle framework)
+StartLimitIntervalSec=120
+StartLimitBurst=5
+
+[Service]
+WorkingDirectory=%h/AzurLanAutomaton
+ExecStart=/usr/bin/python3 -u AzureLaneAutomaton.py
+Restart=on-failure
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=yes
+UMask=0077
+
+[Install]
+WantedBy=default.target

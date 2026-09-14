@@ -1,9 +1,10 @@
 from pathlib import Path
+import os
 
 BASE_DIR = Path(__file__).resolve().parent
 
-ADB_PATH = r"C:\Program Files\BlueStacks_nxt\HD-Adb.exe"
-DEVICE = "127.0.0.1:5555"
+ADB_PATH = os.environ.get("AUTOMATON_ADB_PATH", "adb")
+DEVICE = os.environ.get("AUTOMATON_ADB_DEVICE", "")
 PACKAGE_NAME = "com.YoStarEN.AzurLane"
 
 EXPECTED_SCREEN_SIZE = (1920, 1080)
