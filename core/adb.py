@@ -22,11 +22,31 @@ def run_text(*args: str) -> str:
     return run_bytes(*args).decode(errors="replace").strip()
 
 
-def is_alive() -> bool:
+def connect() -> bool:
     try:
+        subprocess.run(
+            [config.ADB_PATH, "connect", config.DEVICE],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            creationflags=_creation_flags(),
+            timeout=10,
+        )
+
         return run_text("shell", "echo", "alive") == "alive"
+
     except (OSError, subprocess.SubprocessError):
         return False
+
+
+def is_alive() -> bool:
+    try:
+        if run_text("shell", "echo", "alive") == "alive":
+            return True
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+    # Device isn't currently connected: try connecting it.
+    return connect()
 
 
 def screenshot() -> np.ndarray:

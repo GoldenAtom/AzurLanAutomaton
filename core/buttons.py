@@ -16,6 +16,7 @@ class Button(str, Enum):
     SKIP = "skip"
     AUTO = "auto"
     PAUSE = "pause"
+    REDO_SORTIE = "redo_sortie"
 
 
 def _coerce_button(button: Button | str) -> Button:
