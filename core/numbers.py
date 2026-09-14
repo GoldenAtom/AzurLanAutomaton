@@ -34,11 +34,19 @@ def read_number(source):
         env["TESSDATA_PREFIX"]=str(root/"share/tesseract-ocr/5/tessdata")
     ok,data=cv2.imencode(".png",image)
     if not ok:raise RuntimeError("OCR crop encoding failed")
-    result=subprocess.run([executable,"stdin","stdout","--psm","7","-l","eng","-c","tessedit_char_whitelist=0123456789,","tsv"],input=data.tobytes(),capture_output=True,env=env,timeout=10)
-    if result.returncode:raise RuntimeError("OCR failed: "+result.stderr.decode(errors="replace")[-300:])
-    words=[row for row in csv.DictReader(io.StringIO(result.stdout.decode()),delimiter="\t") if row.get("text","").strip()]
-    if len(words)!=1:raise ValueError("Number unreadable or ambiguous; adjust the saved crop")
-    word=words[0];text=word["text"].strip();confidence=float(word["conf"])
-    if not re.fullmatch(r"(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)",text) or confidence<60:
-        raise ValueError("Number unreadable or low confidence: "+repr(text))
-    return {"value":int(text.replace(",","")),"text":text,"confidence":confidence,"source":source}
+    readings=[]
+    for segmentation in ("7","8"):
+        result=subprocess.run([executable,"stdin","stdout","--psm",segmentation,"-l","eng","-c","tessedit_char_whitelist=0123456789,","-c","tessedit_create_tsv=1"],input=data.tobytes(),capture_output=True,env=env,timeout=10)
+        if result.returncode:raise RuntimeError("OCR failed: "+result.stderr.decode(errors="replace")[-300:])
+        words=[row for row in csv.DictReader(io.StringIO(result.stdout.decode()),delimiter="\t") if row.get("text","").strip()]
+        if len(words)!=1:raise ValueError("Number unreadable or ambiguous; adjust the saved crop")
+        word=words[0];text=word["text"].strip();confidence=float(word["conf"])
+        if not re.fullmatch(r"(?:[0-9]+|[0-9]{1,3}(?:,[0-9]{3})+)",text):
+            raise ValueError("Number unreadable: "+repr(text))
+        readings.append((int(text.replace(",","")),text,confidence))
+    if readings[0][0]!=readings[1][0]:
+        raise ValueError("OCR modes disagree: "+str([reading[1] for reading in readings])+". Adjust the number crop.")
+    confidence=max(reading[2] for reading in readings)
+    if confidence<60:
+        raise ValueError("Number unreadable or low confidence: "+repr(readings[0][1]))
+    return {"value":readings[0][0],"text":readings[0][1],"confidence":confidence,"source":source}
