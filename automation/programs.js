@@ -35,7 +35,7 @@ Blockly.defineBlocksWithJsonArray([
 const category=(name,colour,types)=>({kind:'category',name,colour,contents:types.map(type=>({kind:'block',type}))});
 workspace=Blockly.inject('workspace',{toolbox:{kind:'categoryToolbox',contents:[category('Actions',200,['az_press','az_wait_button','az_wait_screen','az_tap','az_wait']),category('Flow',35,['az_if','az_repeat','az_while','az_call','az_return']),category('Values',120,['az_bool','az_number','az_variable','az_compare','az_not','az_visible','az_screen']),category('Data & logs',300,['az_set','az_read','az_log','az_fail'])]},media:'/vendor/blockly/media/',trashcan:true,scrollbars:true,sounds:false,zoom:{controls:true,wheel:true,startScale:.85,minScale:.35,maxScale:1.6}});
 const editEvents=new Set([Blockly.Events.BLOCK_CREATE,Blockly.Events.BLOCK_CHANGE,Blockly.Events.BLOCK_DELETE,Blockly.Events.BLOCK_MOVE]);
-function fingerprint(){return JSON.stringify(Blockly.serialization.workspaces.save(workspace));}
+function fingerprint(){return JSON.stringify(Blockly.serialization.workspaces.save(workspace),(key,value)=>key==='x'||key==='y'?undefined:value);}
 workspace.addChangeListener(event=>{if(!loading&&editEvents.has(event.type))setTimeout(()=>{if(!loading){dirty=cleanWorkspace===null||fingerprint()!==cleanWorkspace;if(dirty)el('message').textContent='Unsaved changes — Run uses the last saved version.';}},0);});
 window.addEventListener('beforeunload',event=>{if(dirty){event.preventDefault();event.returnValue='';}});
 function notice(text){el('message').textContent=text;}
