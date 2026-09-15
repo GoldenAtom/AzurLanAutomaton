@@ -26,6 +26,7 @@ exec "$SCRCPY" \
   --keyboard=sdk \
   --mouse=sdk \
   --max-fps=30 \
-  --video-bit-rate=4M \
+  --max-size=1280 \
+  --video-bit-rate=2M \
   --fullscreen \
   --window-title="Azur Lane · scrcpy"
