@@ -213,6 +213,7 @@ def stop():
 
 
 class Stopped(Exception):pass
+class ProgramFailure(RuntimeError):pass
 class Returned(Exception):
     def __init__(self,value):self.value=value
 
@@ -272,7 +273,10 @@ class Interpreter:
             self.state["block"]=node.get("id");op=node["op"];v=self.state["variables"]
             self.report(f"{self.state['program']}: {op}",True)
             if op=="wait":self.wait(min(node["seconds"],.01) if self.dry else node["seconds"])
-            elif op=="press":v["last_result"]=False if self.dry else self.adapter.press(node["button"],node["threshold"])
+            elif op=="press":
+                v["last_result"]=False if self.dry else self.adapter.press(node["button"],node["threshold"])
+                detail=getattr(self.adapter,"last_action",None)
+                self.report(detail if isinstance(detail,str) else f"press {node['button']} -> {str(v['last_result']).lower()}",True)
             elif op=="tap":
                 if not self.dry:self.adapter.tap(node["x"],node["y"])
                 v["last_result"]=not self.dry
@@ -307,5 +311,5 @@ class Interpreter:
             elif op=="read_number":v[node["variable"]]=0 if self.dry else self.adapter.read_number(node["source"])
             elif op=="return":raise Returned(self.expression(node["value"]))
             elif op=="log":self.report(node["message"],True)
-            elif op=="fail":raise RuntimeError(node["message"])
+            elif op=="fail":raise ProgramFailure(node["message"])
             self.report(force=True)

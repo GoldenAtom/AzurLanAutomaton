@@ -6,10 +6,17 @@ from automation import programs
 from core.action_lock import android_owner
 
 class Android:
+    last_action=None
     def press(self,name,threshold):
         import utility
         utility.connectADB();frame=utility.getScreenshot()
-        return utility.click(name,frame,threshold)
+        match=utility.inspectButton(name,frame,threshold)
+        self.last_action=f"press {name}: score {match.score:.4f}, threshold {threshold:.4f} -> {'tapped' if match.passed else 'no tap'}"
+        if not match.passed:
+            utility.saveDebug(frame,"press_miss_"+name.replace("/","_"))
+            return False
+        utility.tap(match.x,match.y)
+        return True
     def visible(self,name,threshold):
         import utility
         try:
@@ -62,6 +69,8 @@ def serve(stop):
                 result=engine.call(request["name"])
                 state.update(state="completed",result=result)
         except programs.Stopped:state.update(state="stopped")
+        except programs.ProgramFailure as exc:
+            state.update(state="failed",error=str(exc));log.warning("Program ended with error: %s",exc)
         except Exception as exc:
             state.update(state="failed",error=str(exc));log.exception("Program failed")
         finally:

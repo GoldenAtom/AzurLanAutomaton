@@ -6,6 +6,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock,patch
 from automation import programs
+from automation.program_worker import Android
 from core.action_lock import android_owner
 
 
@@ -88,6 +89,9 @@ class InterpreterTests(unittest.TestCase):
     def test_integer_division_by_zero_has_clear_error(self):
         with self.assertRaisesRegex(ValueError,'divide by zero'):
             self.execute([{'op':'set','variable':'bad','value':arithmetic('//',literal(1),literal(0))}])
+    def test_authored_failure_is_distinct_from_engine_crash(self):
+        with self.assertRaisesRegex(programs.ProgramFailure,'expected screen'):
+            self.execute([{'op':'fail','message':'expected screen'}])
     def test_library_snapshot_is_immutable(self):
         library={'main':doc([{'op':'set','variable':'x','value':literal(1)}])}
         engine=programs.Interpreter(library,Mock());library['main']['steps'][0]['value']['value']=5;engine.call('main')
@@ -129,3 +133,19 @@ class ProgramStorageTests(unittest.TestCase):
         with android_owner():
             with self.assertRaisesRegex(RuntimeError,'owned'):
                 with android_owner():pass
+
+class WorkerAndroidTests(unittest.TestCase):
+    @patch('utility.saveDebug')
+    @patch('utility.tap')
+    @patch('utility.inspectButton')
+    @patch('utility.getScreenshot')
+    @patch('utility.connectADB')
+    def test_failed_press_records_score_and_preserves_frame(self,connect,screenshot,inspect,tap,save):
+        frame=Mock();screenshot.return_value=frame
+        inspect.return_value=Mock(score=.8712,passed=False,x=1282,y=251)
+        adapter=Android()
+        self.assertFalse(adapter.press('combat/select_4-2level',.88))
+        inspect.assert_called_once_with('combat/select_4-2level',frame,.88)
+        tap.assert_not_called()
+        save.assert_called_once_with(frame,'press_miss_combat_select_4-2level')
+        self.assertEqual(adapter.last_action,'press combat/select_4-2level: score 0.8712, threshold 0.8800 -> no tap')
