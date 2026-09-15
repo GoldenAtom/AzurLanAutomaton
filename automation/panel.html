@@ -29,7 +29,7 @@
 <p id="crop-size"></p><canvas id="crop-preview" style="max-width:100%;height:auto;background:#101822" aria-label="Selected crop preview"></canvas>
 <div><label>Target folder <select id="template-target"></select></label><label>New target folder (optional) <input id="template-new-target" placeholder="battle"></label>
 <label>Template type <select id="template-kind"><option value="buttons">Button</option><option value="screens">Screen area</option><option value="numbers">Number / OCR</option></select></label>
-<label>Template <select id="template-name"></select></label><label>New template name (optional) <input id="template-new-name" placeholder="campaign_selector"></label><label>Variant <input id="template-variant" value="custom" pattern="[a-z0-9][a-z0-9_-]{0,47}" maxlength="48"></label></div>
+<label>Existing template <select id="template-name"></select></label><label>New template name <input id="template-new-name" placeholder="e.g. close_popup_x"></label><label>Variant (alternate image) <input id="template-variant" value="custom" pattern="[a-z0-9][a-z0-9_-]{0,47}" maxlength="48"></label></div>
 <p id="template-destination"></p><p>Each target folder contains its own buttons, screens and numeric crops. Saved variants become active immediately and survive updates. Existing files are never overwritten.</p>
 <button id="template-save" disabled>Save template</button><a id="template-download" hidden>Download saved PNG</a></div>
 <p id="editor-status" role="status"></p></section>
