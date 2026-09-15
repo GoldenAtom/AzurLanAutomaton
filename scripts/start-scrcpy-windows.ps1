@@ -41,20 +41,21 @@ try {
         '--no-audio',
         '--keyboard=sdk',
         '--mouse=sdk',
-        '--max-fps=60',
-        '--video-bit-rate=8M',
+        '--max-fps=30',
+        '--video-bit-rate=16M',
+        '--no-downsize-on-error',
+        '--print-fps',
         '--window-title=Azur Lane · scrcpy (direct)'
     )
     if ($TestSeconds -gt 0) {
-        $Viewer = Start-Process -FilePath $Scrcpy -PassThru -ArgumentList $ScrcpyArgs
-        try {
-            Start-Sleep -Seconds $TestSeconds
-            if ($Viewer.HasExited) { throw "scrcpy exited early with code $($Viewer.ExitCode)" }
-            Write-Host "Direct scrcpy stayed running for $TestSeconds seconds"
+        $Sample = Join-Path $Root 'local-tools\direct-scrcpy-sample.mkv'
+        Remove-Item -LiteralPath $Sample -Force -ErrorAction SilentlyContinue
+        $ScrcpyArgs += @("--time-limit=$TestSeconds", "--record=$Sample")
+        & $Scrcpy @ScrcpyArgs
+        if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $Sample)) {
+            throw "Direct scrcpy failed to save a $TestSeconds-second sample"
         }
-        finally {
-            if (-not $Viewer.HasExited) { Stop-Process -Id $Viewer.Id -Force }
-        }
+        Write-Host "Recorded direct sample: $Sample"
     }
     else {
         & $Scrcpy @ScrcpyArgs

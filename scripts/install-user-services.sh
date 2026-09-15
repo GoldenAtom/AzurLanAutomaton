@@ -17,5 +17,6 @@ for unit in systemd/azurlane-*; do
   install -m 644 "$unit" "$target"
 done
 systemctl --user daemon-reload
-systemctl --user enable --now azurlane-bot.service azurlane-web.service azurlane-scrcpy.service azurlane-update.timer
+systemctl --user enable --now azurlane-bot.service azurlane-web.service azurlane-update.timer
+systemctl --user disable azurlane-scrcpy.service >/dev/null 2>&1 || true
 echo 'Installed. Boot persistence requires loginctl enable-linger for this user.'
