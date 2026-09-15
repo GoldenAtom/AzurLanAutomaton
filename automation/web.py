@@ -103,9 +103,11 @@ class Handler(BaseHTTPRequestHandler):
                     action=self.path.removeprefix("/api/programs/")
                     if action=="catalog":
                         import utility
-                        result={"names":programs.list_programs(),**utility.assetOptions()}
+                        entries=programs.catalog();result={"names":[item["name"] for item in entries],"programs":entries,**utility.assetOptions()}
                     elif action=="load":result=programs.load(payload.get("name"))
                     elif action=="save":result=programs.save(payload.get("name"),payload.get("program"))
+                    elif action=="favorite":result=programs.favorite(payload.get("name"),payload.get("favorite"))
+                    elif action=="delete":result=programs.delete(payload.get("name"))
                     elif action=="status":result=programs.read_status()
                     elif action=="stop":result=programs.stop()
                     elif action=="run":

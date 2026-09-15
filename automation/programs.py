@@ -20,6 +20,10 @@ def runtime_dir():
     path=config.BASE_DIR/"local-runtime";path.mkdir(exist_ok=True);return path
 
 
+def metadata_dir():
+    path=directory()/"metadata";path.mkdir(exist_ok=True);return path
+
+
 def slug(name):
     if not isinstance(name,str) or not re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}",name):
         raise ValueError("Use a name of 1–48 lowercase letters, digits, hyphens or underscores")
@@ -88,7 +92,9 @@ def validate(program):
                 if int(n)!=n:raise ValueError("Repeat count must be an integer")
                 blocks(node.get("body"),depth+1)
             elif op=="while":expr(node.get("condition"),0);number(node.get("timeout"),.1,86400);blocks(node.get("body"),depth+1)
-            elif op=="call":slug(node.get("program"))
+            elif op=="call":
+                slug(node.get("program"))
+                if "result" in node:slug(node.get("result"))
             elif op=="set":slug(node.get("variable"));expr(node.get("value"),0)
             elif op=="read_number":asset_reference(node.get("source"));slug(node.get("variable"))
             elif op=="return":expr(node.get("value"),0)
@@ -100,6 +106,46 @@ def validate(program):
 
 
 def list_programs():return sorted(p.stem for p in directory().glob("*.json"))
+
+
+def read_index():
+    try:value=json.loads((metadata_dir()/"index.json").read_text())
+    except (FileNotFoundError,json.JSONDecodeError):value={}
+    favorites=value.get("favorites",[]) if isinstance(value,dict) else []
+    return {"favorites":[name for name in favorites if isinstance(name,str) and re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,47}",name)]}
+
+
+def catalog():
+    favorites=set(read_index()["favorites"])
+    entries=[{"name":path.stem,"favorite":path.stem in favorites,"modified":path.stat().st_mtime}
+             for path in directory().glob("*.json")]
+    return sorted(entries,key=lambda item:(not item["favorite"],item["name"]))
+
+
+def favorite(name,value):
+    name=slug(name)
+    if not isinstance(value,bool):raise ValueError("favorite must be true or false")
+    if not (directory()/(name+".json")).is_file():raise ValueError("Program does not exist: "+name)
+    with GUARD:
+        names=set(read_index()["favorites"])
+        (names.add if value else names.discard)(name)
+        atomic(metadata_dir()/"index.json",{"favorites":sorted(names)})
+    return {"message":("Favorited " if value else "Removed favorite from ")+name,"programs":catalog()}
+
+
+def delete(name):
+    name=slug(name);path=directory()/(name+".json")
+    with GUARD:
+        if not path.is_file():raise ValueError("Program does not exist: "+name)
+        status=read_status()
+        if status.get("name")==name and status.get("state") in ("queued","running","stopping"):
+            raise ValueError("Stop this program before deleting it")
+        deleted=directory()/"deleted";deleted.mkdir(exist_ok=True)
+        destination=deleted/(name+"-"+str(time.time_ns())+".json")
+        path.replace(destination)
+        names=set(read_index()["favorites"]);names.discard(name)
+        atomic(metadata_dir()/"index.json",{"favorites":sorted(names)})
+    return {"message":"Deleted "+name+". A recovery copy was archived locally.","programs":catalog()}
 
 def load(name):return json.loads((directory()/(slug(name)+".json")).read_text())
 
@@ -234,7 +280,9 @@ class Interpreter:
                 try:
                     while self.expression(node["condition"]):self.sequence(node["body"],depth);self.wait(.01 if self.dry else .1)
                 finally:self.deadlines.pop()
-            elif op=="call":v["last_result"]=self.call(node["program"],depth+1)
+            elif op=="call":
+                returned=self.call(node["program"],depth+1);v["last_result"]=returned
+                if node.get("result"):v[node["result"]]=returned
             elif op=="set":v[node["variable"]]=self.expression(node["value"])
             elif op=="read_number":v[node["variable"]]=0 if self.dry else self.adapter.read_number(node["source"])
             elif op=="return":raise Returned(self.expression(node["value"]))

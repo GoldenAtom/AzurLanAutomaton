@@ -26,6 +26,12 @@ class InterpreterTests(unittest.TestCase):
         adapter=Mock();adapter.read_number.return_value=4000;adapter.press.return_value=True
         engine=programs.Interpreter({'main':main,'farm_4_8':child},adapter);engine.call('main')
         self.assertEqual(adapter.press.call_count,4)
+    def test_call_stores_returned_value_like_a_function(self):
+        child=doc([{'op':'return','value':literal(42)}])
+        main=doc([{'op':'call','program':'child','result':'answer'}])
+        engine=programs.Interpreter({'main':main,'child':child},Mock());engine.call('main')
+        self.assertEqual(engine.state['variables']['answer'],42)
+        self.assertEqual(engine.state['variables']['last_result'],42)
     def test_wait_timeout_returns_false(self):
         adapter=Mock();adapter.visible.return_value=False
         engine=self.execute([{'op':'wait_button','button':'battle','threshold':.9,'timeout':.1,'interval':.2}],adapter)
@@ -70,6 +76,14 @@ class ProgramStorageTests(unittest.TestCase):
         programs.save('one',doc([]));programs.save('one',doc([{'op':'wait','seconds':1}]))
         self.assertEqual(programs.load('one')['steps'][0]['seconds'],1)
         self.assertEqual(len(list((programs.directory()/'history').glob('*.json'))),1)
+    def test_favorite_catalog_and_reversible_delete(self):
+        programs.save('one',doc([]));programs.save('two',doc([]))
+        programs.favorite('two',True)
+        self.assertEqual([(item['name'],item['favorite']) for item in programs.catalog()],[('two',True),('one',False)])
+        result=programs.delete('two')
+        self.assertIn('recovery copy',result['message'])
+        self.assertEqual(programs.list_programs(),['one'])
+        self.assertEqual(len(list((programs.directory()/'deleted').glob('two-*.json'))),1)
     def test_recursive_and_missing_calls_are_rejected(self):
         programs.save('one',doc([{'op':'call','program':'two'}]))
         with self.assertRaisesRegex(ValueError,'Missing'):programs.snapshot('one')
