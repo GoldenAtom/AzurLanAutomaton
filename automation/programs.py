@@ -69,6 +69,12 @@ def validate(program):
         elif op=="compare":
             if e.get("test") not in (">",">=","<","<=","==","!="):raise ValueError("Invalid comparison")
             expr(e.get("left"),depth+1);expr(e.get("right"),depth+1)
+        elif op=="arithmetic":
+            if e.get("operator") not in ("+","-","*","//","%"):raise ValueError("Invalid arithmetic operator")
+            expr(e.get("left"),depth+1);expr(e.get("right"),depth+1)
+        elif op=="logic":
+            if e.get("operator") not in ("and","or"):raise ValueError("Invalid logic operator")
+            expr(e.get("left"),depth+1);expr(e.get("right"),depth+1)
         elif op=="visible":asset_reference(e.get("button"));number(e.get("threshold"),0,1)
         elif op=="screen":asset_reference(e.get("name"));number(e.get("threshold",.72),0,1)
         elif op=="not":expr(e.get("value"),depth+1)
@@ -91,7 +97,7 @@ def validate(program):
                 n=number(node.get("count"),0,10000)
                 if int(n)!=n:raise ValueError("Repeat count must be an integer")
                 blocks(node.get("body"),depth+1)
-            elif op=="while":expr(node.get("condition"),0);number(node.get("timeout"),.1,86400);blocks(node.get("body"),depth+1)
+            elif op=="while":expr(node.get("condition"),0);number(node.get("timeout"),0,86400);blocks(node.get("body"),depth+1)
             elif op=="call":
                 slug(node.get("program"))
                 if "result" in node:slug(node.get("result"))
@@ -182,8 +188,8 @@ def snapshot(name):
     visit(slug(name));return result
 
 
-def queue(name,dry=False,max_seconds=43200):
-    number(max_seconds,1,86400)
+def queue(name,dry=False,max_seconds=0):
+    number(max_seconds,0,86400)
     if not isinstance(dry,bool):raise ValueError("dry must be boolean")
     with GUARD:
         path=runtime_dir()/"request.json";status=read_status()
@@ -212,9 +218,9 @@ class Returned(Exception):
 
 
 class Interpreter:
-    def __init__(self,library,adapter,cancel=lambda:False,publish=lambda state:None,max_seconds=43200,dry=False):
+    def __init__(self,library,adapter,cancel=lambda:False,publish=lambda state:None,max_seconds=0,dry=False):
         self.library=copy.deepcopy(library);self.adapter=adapter;self.cancel=cancel;self.publish=publish
-        self.deadline=time.monotonic()+max_seconds;self.deadlines=[];self.steps=0;self.dry=dry
+        self.deadline=None if max_seconds==0 else time.monotonic()+max_seconds;self.deadlines=[];self.dry=dry
         self.state={"state":"running","variables":{"last_result":True},"events":[],"block":None,"program":None}
         self.last_publish=0
     def report(self,message=None,force=False):
@@ -224,7 +230,8 @@ class Interpreter:
             self.publish(copy.deepcopy(self.state));self.last_publish=now
     def check(self):
         if self.cancel():raise Stopped()
-        if time.monotonic()>min([self.deadline]+self.deadlines):raise RuntimeError("Program time limit reached")
+        deadlines=([self.deadline] if self.deadline is not None else [])+self.deadlines
+        if deadlines and time.monotonic()>min(deadlines):raise RuntimeError("Program time limit reached")
         self.report()
     def wait(self,seconds):
         end=time.monotonic()+seconds
@@ -239,7 +246,19 @@ class Interpreter:
         if op=="visible":return False if self.dry else self.adapter.visible(node["button"],node["threshold"])
         if op=="screen":return False if self.dry else self.adapter.screen_visible(node["name"],node.get("threshold",.72))
         if op=="not":return not self.expression(node["value"])
+        if op=="logic":
+            left=bool(self.expression(node["left"]))
+            return (left and bool(self.expression(node["right"]))) if node["operator"]=="and" else (left or bool(self.expression(node["right"])))
         a=self.expression(node["left"]);b=self.expression(node["right"])
+        if op=="arithmetic":
+            if isinstance(a,bool) or isinstance(b,bool) or not isinstance(a,(int,float)) or not isinstance(b,(int,float)):
+                raise ValueError("Arithmetic values must be numbers")
+            if not math.isfinite(a) or not math.isfinite(b):raise ValueError("Arithmetic values must be finite")
+            operator=node["operator"]
+            if operator in ("//","%") and b==0:raise ValueError("Cannot divide by zero")
+            result={"+":lambda:a+b,"-":lambda:a-b,"*":lambda:a*b,"//":lambda:a//b,"%":lambda:a%b}[operator]()
+            if isinstance(result,float) and not math.isfinite(result):raise ValueError("Arithmetic result is too large")
+            return result
         return {">":lambda:a>b,">=":lambda:a>=b,"<":lambda:a<b,"<=":lambda:a<=b,"==":lambda:a==b,"!=":lambda:a!=b}[node["test"]]()
     def call(self,name,depth=0):
         if depth>16:raise ValueError("Program call depth exceeded")
@@ -249,8 +268,7 @@ class Interpreter:
         finally:self.state["program"]=previous
     def sequence(self,nodes,depth=0):
         for node in nodes:
-            self.check();self.steps+=1
-            if self.steps>200000:raise RuntimeError("Program step budget exceeded")
+            self.check()
             self.state["block"]=node.get("id");op=node["op"];v=self.state["variables"]
             self.report(f"{self.state['program']}: {op}",True)
             if op=="wait":self.wait(min(node["seconds"],.01) if self.dry else node["seconds"])
@@ -276,10 +294,12 @@ class Interpreter:
             elif op=="repeat":
                 for _ in range(int(node["count"])):self.check();self.sequence(node["body"],depth)
             elif op=="while":
-                self.deadlines.append(time.monotonic()+node["timeout"])
+                limited=node["timeout"]>0
+                if limited:self.deadlines.append(time.monotonic()+node["timeout"])
                 try:
-                    while self.expression(node["condition"]):self.sequence(node["body"],depth);self.wait(.01 if self.dry else .1)
-                finally:self.deadlines.pop()
+                    while self.expression(node["condition"]):self.sequence(node["body"],depth);time.sleep(0)
+                finally:
+                    if limited:self.deadlines.pop()
             elif op=="call":
                 returned=self.call(node["program"],depth+1);v["last_result"]=returned
                 if node.get("result"):v[node["result"]]=returned

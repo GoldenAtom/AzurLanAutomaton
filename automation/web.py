@@ -112,7 +112,7 @@ class Handler(BaseHTTPRequestHandler):
                     elif action=="stop":result=programs.stop()
                     elif action=="run":
                         command("systemctl","--user","start",UNIT)
-                        result=programs.queue(payload.get("name"),payload.get("dry",False),payload.get("max_seconds",43200))
+                        result=programs.queue(payload.get("name"),payload.get("dry",False),payload.get("max_seconds",0))
                     else:raise ValueError("Unknown program action")
                 elif self.path.startswith("/api/templates/"):
                     from automation.template_editor import execute

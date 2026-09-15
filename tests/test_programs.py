@@ -12,6 +12,8 @@ from core.action_lock import android_owner
 def doc(steps):return {'version':1,'steps':steps}
 def literal(value):return {'op':'value','value':value}
 def variable(name):return {'op':'variable','name':name}
+def arithmetic(operator,left,right):return {'op':'arithmetic','operator':operator,'left':left,'right':right}
+def compare(test,left,right):return {'op':'compare','test':test,'left':left,'right':right}
 
 class InterpreterTests(unittest.TestCase):
     def execute(self,steps,adapter=None,**kwargs):
@@ -56,12 +58,42 @@ class InterpreterTests(unittest.TestCase):
     def test_while_has_deadline_even_with_long_wait_body(self):
         with self.assertRaisesRegex(RuntimeError,'time limit'):
             self.execute([{'op':'while','condition':literal(True),'timeout':.1,'body':[{'op':'wait','seconds':100}]}])
+    def test_unlimited_while_and_arithmetic_form_a_counter_loop(self):
+        engine=self.execute([
+            {'op':'set','variable':'counter','value':literal(0)},
+            {'op':'while','condition':compare('<',variable('counter'),literal(100)),'timeout':0,'body':[
+                {'op':'set','variable':'counter','value':arithmetic('+',variable('counter'),literal(1))}
+            ]},
+            {'op':'return','value':variable('counter')}
+        ],max_seconds=0)
+        self.assertEqual(engine.state['variables']['counter'],100)
+    def test_arithmetic_uses_unbounded_integer_values(self):
+        engine=self.execute([
+            {'op':'set','variable':'large','value':literal(2)},
+            {'op':'repeat','count':100,'body':[{'op':'set','variable':'large','value':arithmetic('*',variable('large'),literal(2))}]}
+        ])
+        self.assertEqual(engine.state['variables']['large'],2**101)
+    def test_boolean_logic_short_circuits(self):
+        condition={'op':'logic','operator':'or','left':literal(True),'right':variable('unset')}
+        engine=self.execute([{'op':'if','condition':condition,'then':[{'op':'set','variable':'worked','value':literal(True)}],'else':[]}])
+        self.assertTrue(engine.state['variables']['worked'])
+    def test_stop_interrupts_an_unlimited_loop(self):
+        checks=0
+        def cancel():
+            nonlocal checks
+            checks+=1
+            return checks>20
+        with self.assertRaises(programs.Stopped):
+            self.execute([{'op':'while','condition':literal(True),'timeout':0,'body':[]}],max_seconds=0,cancel=cancel)
+    def test_integer_division_by_zero_has_clear_error(self):
+        with self.assertRaisesRegex(ValueError,'divide by zero'):
+            self.execute([{'op':'set','variable':'bad','value':arithmetic('//',literal(1),literal(0))}])
     def test_library_snapshot_is_immutable(self):
         library={'main':doc([{'op':'set','variable':'x','value':literal(1)}])}
         engine=programs.Interpreter(library,Mock());library['main']['steps'][0]['value']['value']=5;engine.call('main')
         self.assertEqual(engine.state['variables']['x'],1)
     def test_unknown_operations_and_invalid_limits_rejected(self):
-        for node in [{'op':'exec','code':'print(1)'},{'op':'wait','seconds':float('nan')},{'op':'repeat','count':1.5,'body':[]},{'op':'call','program':'../../bad'},{'op':'press','button':'battle/menu/start','threshold':.9}]:
+        for node in [{'op':'exec','code':'print(1)'},{'op':'wait','seconds':float('nan')},{'op':'repeat','count':1.5,'body':[]},{'op':'call','program':'../../bad'},{'op':'press','button':'battle/menu/start','threshold':.9},{'op':'set','variable':'x','value':{'op':'arithmetic','operator':'pow','left':literal(2),'right':literal(3)}}]:
             with self.assertRaises(ValueError):programs.validate(doc([node]))
     def test_unreadable_number_ends_run(self):
         adapter=Mock();adapter.read_number.side_effect=ValueError('unreadable')
