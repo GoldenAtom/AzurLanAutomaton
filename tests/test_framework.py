@@ -11,10 +11,11 @@ class FrameworkTests(unittest.TestCase):
         runtime.run(stop, .001)
 
     def test_status_reports_stopped_bot(self):
-        with patch.object(web, "command", side_effect=["ActiveState=inactive\nSubState=dead\nMainPID=0", "abc123", "stopped", "ActiveState=active", "Already current"]):
+        with patch.object(web, "command", side_effect=["ActiveState=inactive\nSubState=dead\nMainPID=0", "abc123", "stopped", "ActiveState=active", "Already current", "ActiveState=active\nSubState=running"]):
             result = web.status()
         self.assertEqual(result["ActiveState"], "inactive")
         self.assertEqual(result["mode"], "idle (no game interaction)")
+        self.assertEqual(result["scrcpy"]["ActiveState"], "active")
 
     def test_failed_system_command_surfaces_error(self):
         import subprocess
@@ -97,3 +98,13 @@ class BrowserTests(unittest.TestCase):
             status.assert_not_called()
             self.assertEqual(self.request('/api/programs/status',valid),200)
             status.assert_called_once()
+
+    def test_scrcpy_controls_are_same_origin_and_allowlisted(self):
+        host='%s:%s' % self.server.server_address
+        valid={'Origin':'http://'+host,'X-Automaton-Control':'1','Content-Type':'application/json'}
+        with patch.object(web,'command') as command:
+            self.assertEqual(self.request('/api/scrcpy/start'),403)
+            command.assert_not_called()
+            self.assertEqual(self.request('/api/scrcpy/start',valid),200)
+            command.assert_called_once_with('systemctl','--user','start',web.SCRCPY_UNIT)
+            self.assertEqual(self.request('/api/scrcpy/remove',valid),400)

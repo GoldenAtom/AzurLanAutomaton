@@ -22,5 +22,5 @@ git worktree add --detach "$stage" "$new"
 git merge --ff-only "$new"
 for unit in systemd/azurlane-*; do install -m 644 "$unit" "$HOME/.config/systemd/user/"; done
 systemctl --user daemon-reload
-systemctl --user try-restart azurlane-bot.service azurlane-web.service
+systemctl --user try-restart azurlane-bot.service azurlane-web.service azurlane-scrcpy.service
 echo "Deployed $new (previous $old)"

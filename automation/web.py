@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 BIND = os.environ.get("AUTOMATON_WEB_BIND", "127.0.0.1")
 PORT = int(os.environ.get("AUTOMATON_WEB_PORT", "8080"))
 UNIT = "azurlane-bot.service"
+SCRCPY_UNIT = "azurlane-scrcpy.service"
 ACTIONS = {"start", "stop", "restart"}
 
 
@@ -31,6 +32,8 @@ def status():
     info["logs"] = command("journalctl", "--user", "-u", UNIT, "-n", "35", "--no-pager", "-o", "short-iso")
     info["updates"] = command("systemctl", "--user", "show", "azurlane-update.timer", "--property=ActiveState")
     info["update_logs"] = command("journalctl", "--user", "-u", "azurlane-update.service", "-n", "12", "--no-pager", "-o", "short-iso")
+    mirror = command("systemctl", "--user", "show", SCRCPY_UNIT, "--property=ActiveState,SubState")
+    info["scrcpy"] = dict(line.split("=", 1) for line in mirror.splitlines() if "=" in line)
     return info
 
 
@@ -89,7 +92,7 @@ class Handler(BaseHTTPRequestHandler):
                 or self.headers.get("Content-Type") != "application/json"):
             self.reply(403, '{"error":"Same-origin control required"}')
             return
-        if self.path.startswith(("/api/manual/", "/api/templates/", "/api/programs/")):
+        if self.path.startswith(("/api/manual/", "/api/templates/", "/api/programs/", "/api/scrcpy/")):
             try:
                 length = int(self.headers.get("Content-Length", "0"))
                 if not 0 < length <= (500000 if self.path.startswith("/api/programs/") else 4096):
@@ -98,7 +101,13 @@ class Handler(BaseHTTPRequestHandler):
                 payload = json.loads(self.rfile.read(length))
                 if not isinstance(payload, dict):
                     raise ValueError("Expected a JSON object")
-                if self.path.startswith("/api/programs/"):
+                if self.path.startswith("/api/scrcpy/"):
+                    action=self.path.removeprefix("/api/scrcpy/")
+                    if action not in ACTIONS:raise ValueError("Unknown scrcpy action")
+                    command("systemctl","--user",action,SCRCPY_UNIT)
+                    result={"message":"scrcpy "+("started" if action=="start" else "stopped" if action=="stop" else "restarted")}
+                    logging.getLogger("control").info("Browser requested scrcpy %s from %s",action,self.client_address[0])
+                elif self.path.startswith("/api/programs/"):
                     from automation import programs
                     action=self.path.removeprefix("/api/programs/")
                     if action=="catalog":

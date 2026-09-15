@@ -102,6 +102,12 @@ Manual tools require OpenCV and NumPy (`python3-opencv python3-numpy adb` on Deb
 
 ADB uses `AUTOMATON_ADB_DEVICE` when configured. Otherwise, with Waydroid installed, it discovers the current IP from `waydroid status` and connects on port 5555. Other hosts require exactly one ready ADB device. Each manual request checks a fresh connection. Environment overrides belong in `~/.config/azurlane/automaton.env`.
 
+### Live scrcpy control
+
+The main page can start, restart, and stop an official scrcpy mirror, then open it through the existing noVNC browser desktop on port 6080. The mirror uses the active Waydroid ADB address, the headless Wayland display, SDK mouse/keyboard injection, 30 FPS, 4 Mbps video, and no audio. It runs fullscreen inside the 1920×1080 virtual desktop. Scrcpy input bypasses the automaton's Android action lock, so pause an unattended program before controlling the game manually.
+
+`scripts/install-scrcpy-user.sh` installs the checksum-verified official x86-64 release under `~/.local/share/azurlane/scrcpy` and exposes `~/.local/bin/scrcpy`; it does not require a system package. `azurlane-scrcpy.service` keeps the mirror alive and starts after the existing `waydroid-headless.service`. Override the binary with `AUTOMATON_SCRCPY_PATH` or the device with `AUTOMATON_ADB_DEVICE` in the environment file.
+
 Find shows best-match center coordinates, template size, score, threshold and pass/fail, including below-threshold results. Optional bounds are `x1,y1,x2,y2` at native resolution. Press captures and matches a fresh frame, taps once only when it passes, and displays the annotated pre-tap frame. Refresh screenshot to inspect the resulting UI. Requests are serialized; input commands are never automatically retried.
 
 Button templates support `name.png`, `name_*.png`, and `name/*.png`. Existing battle variants are recognized. Missing-template buttons are disabled after Connect. The existing `main_menu.png` reference maps to HOME; `sleep.png` has no defined state and stays unused. Screen identification retains broad image similarity: scores are diagnostics, not calibrated probabilities. Templates and thresholds need tuning. Identification never triggers automatic input.
